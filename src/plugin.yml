@@ -1,0 +1,24 @@
+name: AntiFire
+main: com.yahoo.phil_work.antifire.AntiFire
+version: 0.1
+author: Filbert66
+description: >
+             Fire control, for placement, damage, spread. Includes logging and command to TP to last fire placement
+
+commands:
+  af:
+    alias: antifire
+    description: Basic AntiFire command prefix
+    usage: <command> log|tp
+  log:
+    prefix: af
+    description: Show fire starting log, reverse chrono order, optional player filter
+    usage: <command> [next|<player>]
+    permission: antifire.logview
+    permission-message: You don't have permission to view fire logs
+  tp:  
+    prefix: af
+    description: Teleport to fire start location, last or # previous
+    usage: <command> [last|#] 
+    antifire.teleport
+    permission-message: You don't have permission to teleport to fire locations

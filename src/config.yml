@@ -1,0 +1,20 @@
+nerf_fire:
+  logstart: world
+  nostartby:
+    op: false
+    lightning:
+#      - world
+#    lava:
+#      - world_the_end
+#      - nether
+    player:
+#      - world
+  nodamageto:
+#    block: world
+#    player:
+#      fromlava: world, nether
+#      fromfire:
+#        - world
+#    nonplayer:
+#      fromlava: nether, world_the_end, world
+#      fromfire: world
