@@ -1,6 +1,6 @@
 name: AntiFire
 main: com.yahoo.phil_work.antifire.AntiFire
-version: 0.1
+version: 0.2
 author: Filbert66
 description: >
              Fire control, for placement, damage, spread. Includes logging and command to TP to last fire placement
@@ -20,5 +20,5 @@ commands:
     prefix: af
     description: Teleport to fire start location, last or # previous
     usage: <command> [last|#] 
-    antifire.teleport
+    permission: antifire.teleport
     permission-message: You don't have permission to teleport to fire locations

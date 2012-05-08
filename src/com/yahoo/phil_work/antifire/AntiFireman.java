@@ -4,6 +4,7 @@
  * History: 
  * 27 Mar 2012 : PSW: Created from scratch
  * 12 Apr 2012 : PSW: Ported to new plugin project AntiFire
+ * 17 Apr 2012 : PSW : Added EntityCombustByEntityEvent for lightning fire ignition
  */
 
  package com.yahoo.phil_work.antifire;
@@ -13,9 +14,11 @@
 // import java.util.Random;
  import java.util.logging.Logger;
 import java.util.Collection;
+import java.util.LinkedList;
 //import java.util.regex.Pattern;
 import java.util.logging.Level;
 import java.lang.Character;
+import java.util.NoSuchElementException;
  
 // import net.minecraft.server.WorldServer;
 // import net.minecraft.server.WorldManager;
@@ -23,7 +26,7 @@ import java.lang.Character;
 
 import org.bukkit.event.entity.EntityCombustEvent; // when a player/entity is burnt by fire
 import org.bukkit.event.entity.EntityCombustByBlockEvent; // entity burnt by lava or burning block
-// import org.bukkit.event.entity.EntityCombustByEntityEvent;// entity burnt by lightning, blaze, or FIRE_ASPECT weapon
+import org.bukkit.event.entity.EntityCombustByEntityEvent;// entity burnt by lightning, blaze, or FIRE_ASPECT weapon
 import org.bukkit.event.block.BlockIgniteEvent; // when a block is lit
 import org.bukkit.event.block.BlockBurnEvent; // when a block is destroyed
 import org.bukkit.event.entity.EntityDamageByBlockEvent;
@@ -39,6 +42,7 @@ import org.bukkit.material.MaterialData;
 import org.bukkit.craftbukkit.CraftWorld;
 import org.bukkit.Effect;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 // import org.bukkit.entity.Entity;
 // import org.bukkit.entity.Fireball;
@@ -54,6 +58,8 @@ import org.bukkit.Bukkit;
 
 import com.yahoo.phil_work.BlockId;
 import com.yahoo.phil_work.BlockIdList;
+import com.yahoo.phil_work.antifire.FireLogEntry;
+import com.yahoo.phil_work.antifire.AntifireLog;
 
 public class AntiFireman implements Listener
 {
@@ -85,11 +91,11 @@ public class AntiFireman implements Listener
 
 		plugin.getConfig().getBoolean ("nerf_fire.nostartby.op", false);  // OPs can do by default
 		
-		plugin.getConfig().getStringList ("nerf_fire.nodamageto.block"); 
+		plugin.getConfig().getStringList ("nerf_fire.no	to.block"); 
 		
 		plugin.getConfig().getStringList ("nerf_fire.nodamageto.player.fromlava");		
 		plugin.getConfig().getStringList ("nerf_fire.nodamageto.player.fromfire");
-		plugin.getConfig().getStringList ("nerf_fire.nodamageto.nonplayer.fromlava");		
+		plugin.getConfig().getStringList ("nerf_fire.nodamageto.nonplayer.fromlava");		// Break out to mob, item, painting, player, drops
 		plugin.getConfig().getStringList ("nerf_fire.nodamageto.nonplayer.fromfire");
 
 		plugin.getConfig().getStringList ("nerf_fire.nospread"); // by adjacent fire
@@ -133,10 +139,18 @@ public class AntiFireman implements Listener
 		int found = s.indexOf (pattern);
 		boolean b = false;
 		
+		//plugin.log.finest ("ifStringContains (" + s + "," + pattern + "). Initial found: " + found);
+		
 		if (found != -1) {	
-			if (found + pattern.length() == s.length()) {
-				b= true;
-				//plugin.log.finer ("found '" + pattern + "' at end of '" + s + "'");
+			if (found + pattern.length() == s.length()) {  // pattern at end
+				// Was it at start? 
+				if (found == 0)
+					b = true; // at start
+				else { // was previous char word boundary?
+					Character c = new Character (s.charAt (found - 1));
+					if ( !(c.isLetterOrDigit(c) || c.equals('_')))  // word border
+						b= true;
+				}
 			} else {
 				Character c = new Character (s.charAt(found + pattern.length()));
 				if (c.isLetterOrDigit(c) || c.equals('_')) { // word continues!
@@ -173,7 +187,7 @@ public class AntiFireman implements Listener
 			return ifStringContains (configVal, pattern);
 
 		} else if (plugin.getConfig().isList (configkey)) {
-		//	plugin.log.finer ("Testing '" + configkey + "' as a list");
+			// plugin.log.finer ("Testing '" + configkey + "' as a list for '" + pattern + "'");
 			return plugin.getConfig().getList(configkey).contains (pattern);
 		} else {
 			plugin.log.fine ("ifConfigContains: unexpected configkey '" + configkey + "'");
@@ -214,6 +228,7 @@ public class AntiFireman implements Listener
 				loglevel = Level.INFO;
 				break;
 			case LIGHTNING:// need to test
+				plugin.log.fine ("Lightning strike starting fire at " + event.getBlock().getLocation());
 				disallow = ifConfigContains ("nerf_fire.nostartby.lightning", worldName);
 				break;
 			case SPREAD:
@@ -257,16 +272,23 @@ public class AntiFireman implements Listener
 				}
 
 			
-			if (event.getCause() != BlockIgniteEvent.IgniteCause.SPREAD && ifConfigContains ("nerf_fire.logstart", worldName))
-				plugin.log.info ((p != null ? p.getDisplayName():event.getCause()) + " started fire @ " +
-								 worldName + "(x=" + loc.getX() + ",y=" + loc.getY() + ",z=" + loc.getZ() + ")");
+			if (event.getCause() != BlockIgniteEvent.IgniteCause.SPREAD)
+			{
+				String starter = (p != null ? p.getDisplayName() : event.getCause().toString());
+				
+				plugin.fireLog.add (starter, loc);	// maybe should log in all cases; yes, but not to logger
+				if (ifConfigContains ("nerf_fire.logstart", worldName)) {
+					plugin.log.info (plugin.fireLog.list.getLast().toStringNoDate());  // logger already includes date
+					plugin.log.fine ("Found " + worldName + " in nerf_fire.logstart");
+				}
+			}
 			else
 				plugin.log.log (loglevel, "Allowing fire start by " + (p != null ? p.getDisplayName():event.getCause()) + " in " + worldName);
 		}
 	}		
 	// Fire burns above, or if something is there, along the side of a block
 	// Can return an "incorrect" block if more than one block is adjacent to this airspace. 
-	Block getBurningBlockFrom (final Location loc) {
+	private Block getBurningBlockFrom (final Location loc) {
 		double x = loc.getX(), y = loc.getY(), z= loc.getZ();
 		
 		Location test = new Location (loc.getWorld(), x, y, z);
@@ -352,8 +374,7 @@ public class AntiFireman implements Listener
 		}
 	}
 	/*
-	 * None of these events are triggering on Player igniting from lava. Don't know why
-	 *  WHat other event should I be handling?
+	 *  WHat other event should I be handling? EntityCombustByEntityEvent for lightning, which can catch entities on fire
 	 */
 	@EventHandler (ignoreCancelled = true)
 	public void onFireBurnEntity (EntityCombustByBlockEvent event)
@@ -390,6 +411,41 @@ public class AntiFireman implements Listener
 			}
 		}		
 	}	
+	
+	// EntityblockEvent: Handles Lighting ignition source
+	@EventHandler (ignoreCancelled = true)
+	public void onEntityBurnEntity (EntityCombustByEntityEvent event)
+	{
+		Entity e = event.getEntity();
+		String worldName = e.getLocation().getWorld().getName();
+		Entity burner = event.getCombuster();
+		// The combuster can be a WeatherStorm a Blaze, or an Entity holding a FIRE_ASPECT enchanted item.
+				
+		plugin.log.fine ("Entity " + e.getType() + " combust by " + burner.getType()); // move after check below
+		if (burner.getType() != EntityType.LIGHTNING) {
+			plugin.log.finer ("Burn entity by non-lighting: " + burner.getType());
+			return; 			// Only looking for lightning
+		}
+		
+		if (e instanceof Player) {
+			Player p = (Player)e;
+			if (ifConfigContains ("nerf_fire.nodamageto.player.fromlightning", worldName) ) {
+				plugin.log.fine ("stopped combust to player " + p.getDisplayName() + " from lightning in " + worldName);
+				event.setDuration (0);
+				event.setCancelled (true);
+				return;
+			}
+			
+		} else {
+			if (ifConfigContains ("nerf_fire.nodamageto.nonplayer.fromlightning", worldName) ) {
+				plugin.log.fine ("stopped combust to " + e.getType() + " from lightning in " + worldName);
+				event.setDuration (0);
+				event.setCancelled (true);
+				return;
+			}
+		}		
+	}	
+	
 	/* 
 	 * Apparent sequence of events: 
 	 *    EntityDamageEvent (not yet on fire)

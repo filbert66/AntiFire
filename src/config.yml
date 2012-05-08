@@ -1,13 +1,13 @@
 nerf_fire:
-  logstart: world
+#  logstart: world
   nostartby:
     op: false
-    lightning:
+#    lightning:
 #      - world
 #    lava:
 #      - world_the_end
 #      - nether
-    player:
+#    player:
 #      - world
   nodamageto:
 #    block: world
