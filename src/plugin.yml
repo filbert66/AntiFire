@@ -1,6 +1,8 @@
+# May 8 2012: Added permissions node
+
 name: AntiFire
 main: com.yahoo.phil_work.antifire.AntiFire
-version: 0.2
+version: 0.6
 author: Filbert66
 description: >
              Fire control, for placement, damage, spread. Includes logging and command to TP to last fire placement
@@ -11,14 +13,29 @@ commands:
     description: Basic AntiFire command prefix
     usage: <command> log|tp
   log:
+    alias: lf
     prefix: af
     description: Show fire starting log, reverse chrono order, optional player filter
     usage: <command> [next|<player>]
     permission: antifire.logview
     permission-message: You don't have permission to view fire logs
-  tp:  
+  tpf:  
     prefix: af
     description: Teleport to fire start location, last or # previous
-    usage: <command> [last|#] 
+    usage: <command> [last|#|<player>] 
     permission: antifire.teleport
     permission-message: You don't have permission to teleport to fire locations
+
+permissions:
+  antifire.*:
+    description: Gives access to ALL antifire features
+    children:
+      antifire.startfire: true
+      antifire.logview: true
+      antifire.teleport: true
+  antifire.startfire:
+    description: Allows user to start a fire. Can be overridden by fireproof blocklist
+  antifire.logview:
+    default: true
+  antifire.teleport:
+    default: op 

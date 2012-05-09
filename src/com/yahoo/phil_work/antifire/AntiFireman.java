@@ -5,6 +5,7 @@
  * 27 Mar 2012 : PSW: Created from scratch
  * 12 Apr 2012 : PSW: Ported to new plugin project AntiFire
  * 17 Apr 2012 : PSW : Added EntityCombustByEntityEvent for lightning fire ignition
+ *  8 May 2012 : PSW : Use new pluginName and colors param.
  */
 
  package com.yahoo.phil_work.antifire;
@@ -217,14 +218,13 @@ public class AntiFireman implements Listener
 				if (disallow) {
 					if (p.isOp() && !plugin.getConfig().getBoolean ("nerf_fire.nostartby.op", false)) {
 						disallow = false;
-					} else if (p.isPermissionSet ("antifire.nerf_fire.startfire") && 
-							   p.hasPermission ("antifire.nerf_fire.startfire") ) {
+					} else if (p.isPermissionSet ("antifire.startfire") && p.hasPermission ("antifire.startfire")) {
 						disallow = false;
 						plugin.log.fine (p.getDisplayName() + " has permission .startfire. Overriding nostartby.player");
 					}
 				}
 				if (disallow) 			
-					p.sendMessage (plugin.pdfFile.getName() + " says you don't have fire start permissions");
+					p.sendMessage (plugin.pluginName + " says you don't have fire start permissions");
 				loglevel = Level.INFO;
 				break;
 			case LIGHTNING:// need to test
@@ -262,7 +262,7 @@ public class AntiFireman implements Listener
 				{
 					plugin.log.fine ("blocked fire start on resistant block type " + block.getType() + " in " + worldName);
 					if (p != null)
-						p.sendMessage (plugin.pdfFile.getName() + " says block " + 
+						p.sendMessage (plugin.pluginName + " says block " + 
 									   block.getType() + (b.hasData() ? ":"+ block.getData():"") + " is fire resistant");
 					event.setCancelled (true);
 					return;
@@ -278,7 +278,7 @@ public class AntiFireman implements Listener
 				
 				plugin.fireLog.add (starter, loc);	// maybe should log in all cases; yes, but not to logger
 				if (ifConfigContains ("nerf_fire.logstart", worldName)) {
-					plugin.log.info (plugin.fireLog.list.getLast().toStringNoDate());  // logger already includes date
+					plugin.log.info (plugin.fireLog.list.getLast().toStringNoDate(false));  // logger already includes date
 					plugin.log.fine ("Found " + worldName + " in nerf_fire.logstart");
 				}
 			}

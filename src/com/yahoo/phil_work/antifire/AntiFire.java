@@ -4,6 +4,8 @@
  * HISTORY: 
  *  12 Apr 2012 : first commit
  *  16 Apr 2012 : PSW : Adding commands
+ *   8 May 2012 : PSW : Added permanent firestart log file, only written on disable
+ *                      Added coloring to chat messages.
  */
  
  package com.yahoo.phil_work.antifire;
@@ -51,9 +53,34 @@ public class AntiFire extends JavaPlugin {
 	private String Log_Level;
 	public AntifireLog fireLog;
 	private Map<CommandSender, Integer> Lastlog;  // for log "next" command
+	private File logFile; 
+	private BufferedWriter logFileWriter;
+	public String pluginName; // contains chat color controls
 	
     public void onDisable() {
-		log.info ("Check server.log for firelog entries"); // should flush fireLog to its own file
+		// Write fireLog to a file, and then close it.
+		int logCount = 0;
+		try {
+			for (FireLogEntry l : fireLog.list) {
+				logCount++;
+				logFileWriter.write (l.toString());
+				logFileWriter.newLine();
+			}
+		}
+		catch (IOException ex) {
+			log.warning ("Error writing log " + logFile.getName() + ":" + ex.getMessage());
+		}
+		finally {
+			try {
+				logFileWriter.flush();
+				logFileWriter.close();
+            } catch (IOException ex) {
+				log.warning ("Error flushing log " + logFile.getName() + ":" + ex.getMessage());
+            }
+			log.info ("Successfully wrote " + logCount + " log entries");
+		}
+		logFileWriter = null;
+		logFile = null;
 		fireLog = null;
 		Lastlog.clear();
         
@@ -67,13 +94,26 @@ public class AntiFire extends JavaPlugin {
     public void onEnable() {
         // Register our events
 		this.getServer().getPluginManager().registerEvents (this.antiFire, this);
+
 		pdfFile = this.getDescription();
+		pluginName = ChatColor.DARK_RED + pdfFile.getName() + ChatColor.RESET;
 		log = this.getLogger();
+
+		if (logFile == null) 
+			try {
+				logFile = new File(this.getDataFolder(), "antifire.log");
+				logFileWriter = new BufferedWriter (new FileWriter (logFile, /* append= */true));
+			}
+			catch (IOException ex) {
+				log.warning ("Error opening for write " + logFile.getName() + ":" + ex.getMessage());
+			}
+		
 		Lastlog = new HashMap <CommandSender, Integer>();
 
 		antiFire.initConfig();
 		fireLog = new AntifireLog (this);
 		
+		// Set log level
 		if (getConfig().isString ("log_level")) {
 			Log_Level = getConfig().getString("log_level", "INFO"); // hidden config item
 			try {
@@ -114,7 +154,7 @@ public class AntiFire extends JavaPlugin {
 		if (commandName.equals("log")) {
 			return logCommand (sender, trimmedArgs);
 		}
-		if (commandName.equals("tp")) {
+		if (commandName.equals("tpf")) {
             return tpCommand(sender, trimmedArgs);
 		}
 		
@@ -124,11 +164,12 @@ public class AntiFire extends JavaPlugin {
 
 	//     usage: <command> [next|<player>]
 	private boolean logCommand(CommandSender sender, String[] args) {
-
+		boolean colors = (sender instanceof Player) ? true : false;
+		
 		if (args.length == 0) {
 			// default: display last 10
 			Lastlog.put (sender, 10);
-			for (String s : fireLog.lastFew(10))
+			for (String s : fireLog.lastFew(10, colors))
 				 sender.sendMessage (s);
 			return true;		
 		}
@@ -136,11 +177,11 @@ public class AntiFire extends JavaPlugin {
 		if (args [0].equals("next")) {
 			int next;
 			if ( !Lastlog.containsKey (sender))
-				next = 0; // why you next and you haven't dont it before?
+				next = 0; // why you next and you haven't done it before?
 			else 
 				next = Lastlog.get(sender);
 			
-			for (String s : fireLog.nextFewFrom(10, next)) {
+			for (String s : fireLog.nextFewFrom(10, next, colors)) {
 				sender.sendMessage (s);
 			}
 			Lastlog.put (sender, next + 10);
@@ -149,19 +190,24 @@ public class AntiFire extends JavaPlugin {
 			// Try to see if it's a player name
 			String p = args [0];
 			if ( !validName (p)) {
-				sender.sendMessage("bad player name '" + p + "'");
+				sender.sendMessage(ChatColor.RED + "bad player name '" + p + "'");
                 return true;
             } else if ( !sender.getServer().getOfflinePlayer(p).hasPlayedBefore()) {
 				sender.sendMessage ("'" + p + "' has never played before");
 				return true;
 			}
-			for (String s : fireLog.lastFewBy(10, p))
+			boolean empty = true;
+			for (String s : fireLog.lastFewBy(10, p, colors)) {
+				empty = false;
 				sender.sendMessage (s);
+			}
+			if (empty)
+				sender.sendMessage (pluginName + ": no entries in log by " + p);
 			return true;
 		}
 	}
 	
-	// usage: <command> [last|#|lastby] 
+	// usage: <command> [last|#|<playername>] 
 	private boolean tpCommand(CommandSender sender, String[] args) {
 		if ( !(sender instanceof Player)) {
 			sender.sendMessage (pdfFile.getName() + ": Cannot teleport SERVER");
@@ -178,20 +224,20 @@ public class AntiFire extends JavaPlugin {
 				logEntry = null;
 			}
 			if (logEntry == null) {
-				sender.sendMessage (pdfFile.getName() + ": no entries in log!");
+				sender.sendMessage (pluginName + ": no entries in log!");
 				return true;
 			}
 		} else if (args [0].length() == 1 && Character.isDigit(args[0].charAt(0))) {
 			// # format, meaning back up # 
 			logEntry = fireLog.lastMinus (Integer.parseInt(args[0]));
 			if (logEntry == null) {
-				sender.sendMessage (pdfFile.getName() + ": too far back in log");
+				sender.sendMessage (pluginName + ": too far back in log");
 				return true;
 			}
 		} else { // try to parse as a player name. BUG: Crash on multi-digit "name"
 			String n = args [0];
 			if ( !validName (n)) {
-				sender.sendMessage("bad player name '" + n + "'");
+				sender.sendMessage(ChatColor.RED + "bad player name '" + n + "'");
                 return true;
             } else if ( !sender.getServer().getOfflinePlayer(n).hasPlayedBefore()) {
 				sender.sendMessage ("'" + n + "' has never played before");
@@ -199,12 +245,12 @@ public class AntiFire extends JavaPlugin {
 			}
 			logEntry = fireLog.lastBy (n);
 			if (logEntry == null) {
-				sender.sendMessage (pdfFile.getName() + ": no entries in log!");
+				sender.sendMessage (pluginName + ": no entries in log for " + n);
 				return true;
 			}			
 		}
 		p.teleport (logEntry.loc, TeleportCause.COMMAND);	
-		p.sendMessage (logEntry.toStringNoLoc()); 
+		p.sendMessage (logEntry.toStringNoLoc(/*colors=*/true)); 
 		return true;
 	}		
 
