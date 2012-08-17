@@ -1,5 +1,10 @@
 nerf_fire:
-#  logstart: world
+  logstart:
+    player: world
+    lightning: world
+#   lava: 
+  whitelist: false
+  nospread: world
   nostartby:
     op: false
 #    lightning:
@@ -9,6 +14,7 @@ nerf_fire:
 #      - nether
 #    player:
 #      - world
+#    explosion: world
   nodamageto:
 #    block: world
 #    player:

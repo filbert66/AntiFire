@@ -6,6 +6,8 @@
  * 12 Apr 2012 : PSW: Ported to new plugin project AntiFire
  * 17 Apr 2012 : PSW : Added EntityCombustByEntityEvent for lightning fire ignition
  *  8 May 2012 : PSW : Use new pluginName and colors param.
+ * 14 Aug 2012 : PSW : Added configurable firestart logging;
+ *                   : Added nerf_fire.nostartby.explosion
  */
 
  package com.yahoo.phil_work.antifire;
@@ -32,6 +34,8 @@ import org.bukkit.event.block.BlockIgniteEvent; // when a block is lit
 import org.bukkit.event.block.BlockBurnEvent; // when a block is destroyed
 import org.bukkit.event.entity.EntityDamageByBlockEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.entity.ExplosionPrimeEvent;
+import org.bukkit.event.EventPriority;
 
 import org.bukkit.Material;
 import org.bukkit.Location;
@@ -88,11 +92,28 @@ public class AntiFireman implements Listener
 		plugin.getConfig().getStringList ("nerf_fire.nostartby.lightning");  
 		plugin.getConfig().getStringList ("nerf_fire.nostartby.lava"); 
 		plugin.getConfig().getStringList ("nerf_fire.nostartby.player");  // should be user-specific (Permissions!), or could be region-based
-		plugin.getConfig().getStringList ("nerf_fire.logstart"); // logs who and were in console
+		plugin.getConfig().getStringList ("nerf_fire.nostartby.explosion"); 
+		
+		if (plugin.getConfig().isString ("nerf_fire.logstart") || plugin.getConfig().isList ("nerf_fire.logstart")) // old style 
+		{
+			List <String> logstart = plugin.getConfig().getStringList ("nerf_fire.logstart"); // logs who and were in console
+			plugin.log.config ("old style logstart; setting .lava, .player, .lightning to the same");
+			
+			// Set values that are now checked by new code
+			plugin.getConfig().set ("nerf_fire.logstart.lava", logstart);
+			plugin.getConfig().set ("nerf_fire.logstart.player", logstart);
+			plugin.getConfig().set ("nerf_fire.logstart.lightning", logstart);					
+		} else { // new style
+			plugin.log.fine ("new style logstart found");
+
+			plugin.getConfig().getStringList ("nerf_fire.logstart.lava");
+			plugin.getConfig().getStringList ("nerf_fire.logstart.player");
+			plugin.getConfig().getStringList ("nerf_fire.logstart.lightning");
+		}
 
 		plugin.getConfig().getBoolean ("nerf_fire.nostartby.op", false);  // OPs can do by default
 		
-		plugin.getConfig().getStringList ("nerf_fire.no	to.block"); 
+		plugin.getConfig().getStringList ("nerf_fire.nodamageto.block"); 
 		
 		plugin.getConfig().getStringList ("nerf_fire.nodamageto.player.fromlava");		
 		plugin.getConfig().getStringList ("nerf_fire.nodamageto.player.fromfire");
@@ -191,11 +212,12 @@ public class AntiFireman implements Listener
 			// plugin.log.finer ("Testing '" + configkey + "' as a list for '" + pattern + "'");
 			return plugin.getConfig().getList(configkey).contains (pattern);
 		} else {
-			plugin.log.fine ("ifConfigContains: unexpected configkey '" + configkey + "'");
+			
+			plugin.log.fine ("ifConfigContains: configkey '" + configkey + "' not in config.yml");
 			return false;
 		}
 	}
-
+	
 	/*
 	 * Begin Event Handlers
 	 */
@@ -207,14 +229,22 @@ public class AntiFireman implements Listener
 		String worldName = event.getBlock().getWorld().getName();
 
 		boolean disallow = false;
+		boolean shouldLog = false;
 		Level loglevel = Level.FINE;
 		
 		switch (event.getCause()) {
 			case LAVA:
 				disallow = ifConfigContains ("nerf_fire.nostartby.lava", worldName);
+				shouldLog = ifConfigContains ("nerf_fire.logstart.lava", worldName);
 				break;
+				
+			case FIREBALL: // docs say only by player
+				if (p == null)
+					plugin.log.warning ("Expected only players to start with fireballs, per docs");
 			case FLINT_AND_STEEL:
 				disallow = ifConfigContains ("nerf_fire.nostartby.player", worldName);
+				shouldLog = ifConfigContains ("nerf_fire.logstart.player", worldName);
+
 				if (disallow) {
 					if (p.isOp() && !plugin.getConfig().getBoolean ("nerf_fire.nostartby.op", false)) {
 						disallow = false;
@@ -227,12 +257,16 @@ public class AntiFireman implements Listener
 					p.sendMessage (plugin.pluginName + " says you don't have fire start permissions");
 				loglevel = Level.INFO;
 				break;
+				
 			case LIGHTNING:// need to test
 				plugin.log.fine ("Lightning strike starting fire at " + event.getBlock().getLocation());
 				disallow = ifConfigContains ("nerf_fire.nostartby.lightning", worldName);
+				shouldLog = ifConfigContains ("nerf_fire.logstart.lightning", worldName);
 				break;
+				
 			case SPREAD:
 				disallow = ifConfigContains ("nerf_fire.nospread", worldName);
+				// shouldLog = ifConfigContains ("nerf_fire.logstart.spread", worldName);
 				loglevel = Level.FINER;
 				break;
 
@@ -272,20 +306,19 @@ public class AntiFireman implements Listener
 				}
 
 			
-			if (event.getCause() != BlockIgniteEvent.IgniteCause.SPREAD)
+			if (shouldLog)
 			{
 				String starter = (p != null ? p.getDisplayName() : event.getCause().toString());
 				
-				plugin.fireLog.add (starter, loc);	// maybe should log in all cases; yes, but not to logger
-				if (ifConfigContains ("nerf_fire.logstart", worldName)) {
-					plugin.log.info (plugin.fireLog.list.getLast().toStringNoDate(false));  // logger already includes date
-					plugin.log.fine ("Found " + worldName + " in nerf_fire.logstart");
-				}
+				plugin.fireLog.add (starter, loc);	
+				plugin.log.info (plugin.fireLog.list.getLast().toStringNoDate(false));  // logger already includes date
+				// plugin.log.fine ("Found " + worldName + " in nerf_fire.logstart");
 			}
 			else
 				plugin.log.log (loglevel, "Allowing fire start by " + (p != null ? p.getDisplayName():event.getCause()) + " in " + worldName);
 		}
 	}		
+				
 	// Fire burns above, or if something is there, along the side of a block
 	// Can return an "incorrect" block if more than one block is adjacent to this airspace. 
 	private Block getBurningBlockFrom (final Location loc) {
@@ -499,6 +532,18 @@ public class AntiFireman implements Listener
 		onFireDamageEntity ((EntityDamageEvent)event);
 	}
 
+	// New handler of nerf_fire.nostartby.explosion
+	@EventHandler (ignoreCancelled = true, priority = EventPriority.MONITOR)
+	public void onExplosionPrime (ExplosionPrimeEvent event) 
+	{		
+		String worldName = event.getEntity().getLocation().getWorld().getName();
+
+		if (ifConfigContains ("nerf_fire.nostartby.explosion", worldName) && event.getFire()) {
+			event.setFire (false);
+			plugin.log.fine ("set " + event.getEntityType() + " explosion to NOT cause fire");
+		}
+		//continue processing
+	}
 	
 }
 

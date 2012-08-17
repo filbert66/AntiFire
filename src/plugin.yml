@@ -2,10 +2,10 @@
 
 name: AntiFire
 main: com.yahoo.phil_work.antifire.AntiFire
-version: 0.6
+version: 0.8
 author: Filbert66
 description: >
-             Fire control, for placement, damage, spread. Includes logging and command to TP to last fire placement
+             Fire control, for starting/placement, damage, spread. Includes logging and command to TP to last fire placement
 
 commands:
   af:
@@ -36,6 +36,8 @@ permissions:
   antifire.startfire:
     description: Allows user to start a fire. Can be overridden by fireproof blocklist
   antifire.logview:
+    description: Allows user to view fire start log in game.
     default: true
   antifire.teleport:
+    description: Allows user to teleport to fire start locations
     default: op 
