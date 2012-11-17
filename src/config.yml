@@ -1,3 +1,5 @@
+# 21 Aug 2012: Added logflushsecs
+
 nerf_fire:
   logstart:
     player: world
@@ -24,3 +26,4 @@ nerf_fire:
 #    nonplayer:
 #      fromlava: nether, world_the_end, world
 #      fromfire: world
+  logflushsecs: 600

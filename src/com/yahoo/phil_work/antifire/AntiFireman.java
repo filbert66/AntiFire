@@ -8,6 +8,8 @@
  *  8 May 2012 : PSW : Use new pluginName and colors param.
  * 14 Aug 2012 : PSW : Added configurable firestart logging;
  *                   : Added nerf_fire.nostartby.explosion
+ * 21 Aug 2012 : PSW : Added param to printConfig()
+ *                   : Added use of nerf_fire.logflushsecs and auto-flush feature
  */
 
  package com.yahoo.phil_work.antifire;
@@ -56,6 +58,10 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.Listener;
 import org.bukkit.event.EventHandler;
 
+import org.bukkit.command.CommandSender;
+import org.bukkit.ChatColor;
+
+
 //import org.bukkit.inventory.ItemStack;
 //import org.bukkit.craftbukkit.CraftServer;
 //import org.bukkit.craftbukkit.CraftWorld;
@@ -69,7 +75,7 @@ import com.yahoo.phil_work.antifire.AntifireLog;
 public class AntiFireman implements Listener
 {
 	private final AntiFire plugin;
-	private	BlockIdList FireResistantList;
+	public	BlockIdList FireResistantList;
 
 	public AntiFireman (AntiFire instance)
 	{
@@ -123,6 +129,8 @@ public class AntiFireman implements Listener
 		plugin.getConfig().getStringList ("nerf_fire.nospread"); // by adjacent fire
 		
 		plugin.getConfig().getBoolean ("nerf_fire.whitelist", false);  // blacklist is default
+		
+		plugin.getConfig().getInt ("nerf_fire.logflushsecs"); // default in config.yml
 
 		FireResistantList = new BlockIdList (this.plugin);
 		FireResistantList.loadBlockList ("nerf_fire.blocklist");
@@ -131,7 +139,23 @@ public class AntiFireman implements Listener
 			plugin.saveDefaultConfig();
 	}
 	
-	public void printConfig() 
+	private void printMsg (CommandSender requestor, String msg)
+	{
+		if (requestor == null)
+			plugin.log.config (msg);
+		else {
+			int colon = msg.indexOf(':');
+			
+			requestor.sendMessage (ChatColor.BLUE + msg.substring(0,colon+1) + 
+								   ChatColor.GRAY + msg.substring (colon + 1, msg.length()) );
+		}
+	}
+	public boolean printConfig() 
+	{
+		return printConfig (null);
+	}
+	
+	public boolean printConfig(CommandSender requestor) 
 	{
 		for (String key : plugin.getConfig().getConfigurationSection ("nerf_fire").getKeys(true)) {
 			key = "nerf_fire." + key;
@@ -140,20 +164,21 @@ public class AntiFireman implements Listener
 				continue;
 			
 			else if (plugin.getConfig().isInt(key))
-				plugin.log.config (key + ": " + plugin.getConfig().getInt(key));
+				printMsg (requestor, key + ": " + plugin.getConfig().getInt(key));
 			else if (plugin.getConfig().isBoolean(key)) 
-				plugin.log.config (key + ": " + plugin.getConfig().getBoolean(key));
+				printMsg (requestor, key + ": " + plugin.getConfig().getBoolean(key));
 			else if (key.indexOf ("blocklist") > 0) 
-				FireResistantList.printList ();
+				FireResistantList.printList (requestor);
 			else if (plugin.getConfig().isString(key))
 			{
-				plugin.log.config (key + ": " + plugin.getConfig().getString(key));
+				printMsg (requestor, key + ": " + plugin.getConfig().getString(key));
 			}
 			else if (plugin.getConfig().isList (key)) {
-				plugin.log.config (key + ": " + plugin.getConfig().getList(key)); 
+				printMsg (requestor, key + ": " + plugin.getConfig().getList(key)); 
 			} else 
-				plugin.log.config ("Fireman: Unrecognized config key: " + key);
+				plugin.log.warning ("Fireman: Unrecognized config key: " + key);
 		}
+		return true;
 	}
 
 	private boolean ifStringContains (String s, String pattern)
@@ -195,7 +220,7 @@ public class AntiFireman implements Listener
 	/* 
 	 * Created to allow admins to define configs asList or asString, and search either way.
 	 */
-	private boolean ifConfigContains (String configkey, String pattern) 
+	public boolean ifConfigContains (String configkey, String pattern) 
 	{		
 		if (plugin.getConfig().isString(configkey)) {
 			String configVal = plugin.getConfig().getString(configkey);
@@ -310,7 +335,10 @@ public class AntiFireman implements Listener
 			{
 				String starter = (p != null ? p.getDisplayName() : event.getCause().toString());
 				
-				plugin.fireLog.add (starter, loc);	
+				if (plugin.fireLog.add (starter, loc) > 10) // don't flush to disk until we get 10 events
+				{
+					plugin.flushLog (null, plugin.getConfig().getInt ("nerf_fire.logflushsecs"));
+				}
 				plugin.log.info (plugin.fireLog.list.getLast().toStringNoDate(false));  // logger already includes date
 				// plugin.log.fine ("Found " + worldName + " in nerf_fire.logstart");
 			}

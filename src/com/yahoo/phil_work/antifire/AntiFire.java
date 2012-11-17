@@ -6,11 +6,14 @@
  *  16 Apr 2012 : PSW : Adding commands
  *   8 May 2012 : PSW : Added permanent firestart log file, only written on disable
  *                      Added coloring to chat messages.
+ *  21 Aug 2012 : PSW : Added 'af' admin commands, flushLog()
  */
  
  package com.yahoo.phil_work.antifire;
 
+import java.util.Arrays;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
@@ -37,6 +40,7 @@ import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
 
 import com.yahoo.phil_work.antifire.FireLogEntry;
 import com.yahoo.phil_work.antifire.AntifireLog;
+import com.yahoo.phil_work.BlockIdList;
 
 /**
  * Fire control, for placement, damage, spread. Includes logging and command to TP to last fire placement
@@ -57,13 +61,26 @@ public class AntiFire extends JavaPlugin {
 	private BufferedWriter logFileWriter;
 	public String pluginName; // contains chat color controls
 	
-    public void onDisable() {
-		// Write fireLog to a file, and then close it.
+	public void flushLog (CommandSender requestor) {
+		this.flushLog (requestor, 0);  // zero seconds from Now
+	}
+	
+    public void flushLog (CommandSender requestor, int secondsAge) {
+		// Write fireLog to a file
+		long youngest = new Date().getTime() - (secondsAge * 1000); // anything younger won't get flushed
 		int logCount = 0;
+		
+		if (logFileWriter == null) {
+			log.warning ("Error flushing log. Restart server to reinitialize logfile");
+			return;
+		} 
 		try {
-			for (FireLogEntry l : fireLog.list) {
+			FireLogEntry l;
+			
+			while (fireLog.list.size() > 0 && fireLog.list.peek().date.getTime() <= youngest) { 
+				// only keep going if first entry is older than youngest
 				logCount++;
-				logFileWriter.write (l.toString());
+				logFileWriter.write (fireLog.list.remove().toString());
 				logFileWriter.newLine();
 			}
 		}
@@ -73,11 +90,28 @@ public class AntiFire extends JavaPlugin {
 		finally {
 			try {
 				logFileWriter.flush();
-				logFileWriter.close();
             } catch (IOException ex) {
 				log.warning ("Error flushing log " + logFile.getName() + ":" + ex.getMessage());
             }
-			log.info ("Successfully wrote " + logCount + " log entries");
+			if (logCount > 0) {
+				String msg = "Successfully wrote " + logCount + " firelog entries";
+				
+				if (requestor == null)
+					log.info (msg);
+				else 
+					requestor.sendMessage (msg);
+			}
+		}
+	}
+	
+	public void onDisable() {
+		// Write fireLog to a file, and then close it.
+		try {
+			this.flushLog(null);
+			logFileWriter.close();
+		} catch (IOException ex) {
+			log.warning ("Error closing log " + logFile.getName() + ":" + ex.getMessage());
+
 		}
 		logFileWriter = null;
 		logFile = null;
@@ -148,7 +182,7 @@ public class AntiFire extends JavaPlugin {
         String[] trimmedArgs = args;
 
         // sender.sendMessage(ChatColor.GREEN + trimmedArgs[0]);
-        if (commandName.equals("antifire")) {
+        if (commandName.equals("af")) {
             return afCommands(sender, trimmedArgs);
 		}
 		if (commandName.equals("log")) {
@@ -255,86 +289,97 @@ public class AntiFire extends JavaPlugin {
 	}		
 
     private boolean afCommands(CommandSender sender, String[] args) {
-        sender.sendMessage ("Sorry, commands not yet implemented");
-		return true;
-	/*	
-		try {
-            Player player = null;
-            String kicker = "SERVER";
-            if (sender instanceof Player) {
-                player = (Player) sender;
-                kicker = player.getName();
-				if ( !player.isOp()) {
-					sender.sendMessage("must be OP to ban");
-					return true;
-				}						
-            }
+	
+		if (args.length == 0) 
+			return false; // print usage
 
-            // Has enough arguments?
-            if (args.length < 1)
-                return false;
-
-            String p = args[0]; // Get the victim's name
-            if (!validName(p)) {
-                sender.sendMessage("bad player name '" + p + "'");
-                return true;
-            }
-            p = p.toLowerCase();
-            Player victim = this.getServer().getPlayer(p); // What player is
-            // really the victim?
-            // Reason stuff
-            String reason = null;
-            if (args.length > 1) {  // reason on rest of line
-                reason = combineSplit(1, args, " ");
-            }
-			reason = (reason != null ? "for " + reason : "");
-			
-            boolean broadcast = false;
-            String ip = null;
-            if (victim != null) {
-                ip = victim.getAddress().getAddress().getHostAddress();
-            }
-			else {
-				sender.sendMessage(p + " not online");
+		String commandName = args[0].toLowerCase();
+        if (commandName.equals("print")) {
+            return antiFire.printConfig (sender);
+		}
+		else if (commandName.equals("fireproof") || commandName.equals ("burnable")) {
+			boolean whitelist = this.getConfig().getBoolean ("nerf_fire.whitelist");
+			if (args.length == 1) { // no changes, just print
+				if (whitelist)
+					sender.sendMessage ("Blocks below are burnable:");
+				else {
+					sender.sendMessage ("Blocks below are fireproof");
+				}
+				antiFire.FireResistantList.printList (sender);
 			}
-			
-            // Log in console
-            log.info(kicker + " banning player '" + p + "' " + reason);
+			else {
+				BlockIdList newBlocks = new BlockIdList (this, args[1], sender); // parse new list
+				 // use new list so that if it fails, we don't wipe out old one.
+				
+				if ( !newBlocks.isEmpty()) {
+					if ((whitelist && !commandName.equals ("burnable")) ||
+						(!whitelist && !commandName.equals ("fireproof")) )
+					{ // then command will also reset nerf_fire.whitelist 
+						this.getConfig().set ("nerf_fire.whitelist", commandName.equals ("burnable"));
+						
+						antiFire.FireResistantList.setList (newBlocks); // keep other stuff same
+						this.getConfig().set ("nerf_fire.blocklist", antiFire.FireResistantList.asString());
+						
+						sender.sendMessage ("Reset to " + (commandName.equals ("burnable") ? "whitelist" : "blacklist") + " with new blocklist below");
+					}
+					else 
+					{ // commandname matches current setting of .whitelist. Add to list
+						antiFire.FireResistantList.append (newBlocks);
+						sender.sendMessage ("Appended to " + (commandName.equals ("burnable") ? "whitelist" : "blacklist") + " with new blocklist below");
+					}
+					antiFire.FireResistantList.printList (sender);
+				}
+			}
+			return true;									
+		}
+		else if (commandName.equals("save")) {
+			this.saveConfig();
+			return true;									
+		}
+		else if (commandName.equals("flush")) {
+			flushLog(sender);
+			return true;									
+		}
+		else if (commandName.equals("spread")) {
+			if (args.length == 1) {
+				if ( !(sender instanceof Player)) // no params or can't impute world
+					sender.sendMessage ("Fire spread is disabled in:" + this.getConfig().getString("nerf_fire.nospread")); // do I need to check for list?
+				else {
+					String wName = ((Player)sender).getLocation().getWorld().getName();
+				
+					sender.sendMessage ("Fire spread in your world is " + 
+										(antiFire.ifConfigContains ("nerf_fire.nospread", wName) ? ChatColor.BLACK + "NOT " + ChatColor.RESET : "") + "allowed");
+				}
+			} else if ( !(sender instanceof Player)) {
+				sender.sendMessage (pdfFile.getName() + ": Cannot get current world of SERVER");
+			} else {
+				// have a parameter
+				Player p = (Player)sender;
+				boolean turnOnSpread = args[1].toLowerCase().equals("on");
+				String wName = p.getLocation().getWorld().getName();
 
-            if (victim != null) { 
-                // Send message to victim
-                String kickerMsg = kicker + " has banned you " + reason;          
-				this.getServer().banIP (ip);
-				victim.setBanned (true);
-				victim.kickPlayer(kickerMsg);
-            }
-            // If he isn't online we should check to see if the server even
-            // knows who he is
-            else {
-                OfflinePlayer off = getServer().getOfflinePlayer(p);
-                if (!off.hasPlayedBefore()) {
-                    // get offline player is case sensitive ...
-                    OfflinePlayer[] oPlayers = getServer().getOfflinePlayers();
-                    for (OfflinePlayer oP : oPlayers) {
-                        if (oP.getName().equalsIgnoreCase(p)) {
-                            off = oP;
-                            break;
-                        }
-                    }
-                }
-                if (off == null || !off.hasPlayedBefore()) {
-                    sender.sendMessage("Never saw player '" + p + "' before");
-                } else {
-					off.setBanned (true);
-					Date d = new Date (off.getLastPlayed());
-					sender.sendMessage ("banned (unknown IP) " + p + ", who was last seen on " + d);
-                }
-            }
+				// Not working when config is a string. Need to 
+				List <String> noSpread = (this.getConfig().isString ("nerf_fire.nospread") ?
+											new ArrayList(Arrays.asList(getConfig().getString ("nerf_fire.nospread").split(","))) : 
+											getConfig().getStringList ("nerf_fire.nospread") );
+				this.log.fine ("Current nospread=" + noSpread);
+				if (turnOnSpread) { // turn on spread means remove nospread
+					noSpread.remove (wName);
+				}
+				else if (!turnOnSpread && !antiFire.ifConfigContains ("nerf_fire.nospread", wName))
+					noSpread.add (wName);
+				
+				this.getConfig().set ("nerf_fire.nospread", noSpread);
+				sender.sendMessage (ChatColor.BLUE + "Nospread now effective in: " + ChatColor.GRAY + noSpread);
+			}
+			return true;									
+		}
+		
+		try {
         } catch (Exception exc) {
             exc.printStackTrace();
         }
-        return true;
-	 */
+        return false;
 	}
 
 }

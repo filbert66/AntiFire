@@ -1,13 +1,24 @@
+/*
+ * History:
+ *  21 Aug 2012: Allow printList() commandSender to allow sendMessage() vs. plugin.log
+ *               Added append(), setList(), parseBlockList(), asString()
+ */
+
 package com.yahoo.phil_work;
 
 import java.util.List;
 import java.util.ArrayList;
 import java.util.logging.Logger;
+import java.lang.StringBuilder;
 
 import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.PluginLogger;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.configuration.file.FileConfiguration;
+
+import org.bukkit.command.CommandSender;
+import org.bukkit.ChatColor;
+import org.bukkit.entity.Player;
 
 public class BlockIdList {
 	List <BlockId> blockList;
@@ -15,28 +26,51 @@ public class BlockIdList {
 	private final JavaPlugin plugin;
 	private String listName;
 
-	public BlockIdList (JavaPlugin instance) {
+	// Constructors
+	public BlockIdList (JavaPlugin instance, String init, CommandSender sender) {
 		this.log = instance.getLogger();
 		this.plugin = instance;
 		blockList = new ArrayList<BlockId>();
-	}
 
+		if (init != null)
+			this.parseBlockList (init, sender);
+	}
+	public BlockIdList (JavaPlugin instance) {
+		this (instance, null, null);
+	}
+	
+	// Methods
 	public boolean contains (BlockId block) {
 		return blockList.contains (block);
 	}
-	
+	public String name () {
+		return listName;
+	}
+	public int size (){
+		return blockList.size();
+	}
 	public boolean isEmpty() {
 		return (blockList == null || blockList.size() == 0);
 	}
 	
-    // returns number of items loaded into list
-	public int loadBlockList (String listname) {
-		this.listName = listname;
-		
+	public BlockIdList append (BlockIdList more) {
+		this.blockList.addAll (more.blockList);
+		return this;
+	}
+	public BlockIdList setList (BlockIdList newList) {
+		this.blockList = newList.blockList;
+		return this;
+	}
+	
+	public void parseBlockList (String init) {
+		this.parseBlockList (init, null);
+	}
+	
+    // Adds given string of IDs to existing list.
+	public BlockIdList parseBlockList (String init, CommandSender sender) {
 		try{
-			String tmp_str1 = this.plugin.getConfig().getString(listname, "").trim();
-			String[] split = tmp_str1.split(",");
-
+			String[] split = init.split(",");
+			
 			if(split!=null){        //split the list into single strings of integer
 				for(String elem : split) {  // may include form of #:#
 					if (elem.length() > 0) {
@@ -45,31 +79,72 @@ public class BlockIdList {
 				}
 			}
 			else {
-				log.config ("Empty " + listname);
+				if (sender == null)
+					log.config ("Empty " + listName);
+				else {
+					sender.sendMessage ("No block IDs found in '" + init + "'");
+				}
+
 				blockList.clear();
 				blockList = null;
 			}
 		}
 		catch (Exception e) {
-			this.log.warning ("Wrong values for " + listname + "field");
-
+			if (sender == null)
+				this.log.warning ("Wrong values for " + listName + "field");
+			else {
+				sender.sendMessage ("Wrong values in '" + init + "'");
+			}
+			
 			blockList.clear();
 			blockList = null;
 		}
+		return this;
+	}
+	
+    // returns number of items loaded into list
+	public int loadBlockList (String listname) {
+		this.listName = listname;
+		
+		String tmp_str1 = this.plugin.getConfig().getString(listname, "").trim();
+		parseBlockList (tmp_str1);
+		
 		return (blockList != null? blockList.size() : 0);
 	}
 
-	public void printList () {
+	public String asString () {
 		String ListAsString = new String();
-
+		
 		if (blockList == null) {
-			this.log.config ("Empty " + listName + ":null value");
-			return;
+			return "";
 		}
 		for (BlockId block : blockList) {
 			String asString = block.toString();
 			ListAsString += asString + ",";
 		}
-		this.log.config (listName + "[" + blockList.size() + "]: " + ListAsString);
+		return ListAsString;
+	}
+	
+	public void printList (CommandSender sender) {
+		String ListAsString = this.asString();
+
+		if (ListAsString == "") {
+			this.log.config ("Empty " + listName + ":null value");
+			return;
+		}
+		if (sender != null) {
+			if (sender instanceof Player) {
+				int period = listName.indexOf('.');
+
+				/* DEBUG */log.fine ("Printing " + listName);
+				sender.sendMessage (ChatColor.DARK_BLUE + listName.substring(0,period+1) + 
+								   ChatColor.BLUE + listName.substring (period + 1, listName.length()) + 
+								   "[" + blockList.size() + "]: " + 
+								   ChatColor.GRAY + ListAsString);
+			} else // not player, but SERVER. colors may show in terminal, but not in text file
+				sender.sendMessage (listName + "[" + blockList.size() + "]: " + ListAsString);
+		}
+		else
+			this.log.config (listName + "[" + blockList.size() + "]: " + ListAsString);
 	}
 }

@@ -1,3 +1,8 @@
+/* 
+ * History:
+ *   21 Aug 2012 : PSW: Added return value from add()
+ */
+
 package com.yahoo.phil_work.antifire;
 
 import java.util.logging.Logger;
@@ -33,12 +38,13 @@ public class AntifireLog {
 		list = new LinkedList <FireLogEntry>();
 	}		
 
-	public void add (String player, Location loc) {
+	public int add (String player, Location loc) {
 		FireLogEntry entry = new FireLogEntry (player, new Date(), loc)	;
 		list.addLast (entry);
+		return list.size();
 	}
-    public void add (Player starter, Location loc) {
-		this.add (starter.getName(), loc);
+    public int add (Player starter, Location loc) {
+		return this.add (starter.getName(), loc);
 	}	
 
     public boolean contains (OfflinePlayer p) {
