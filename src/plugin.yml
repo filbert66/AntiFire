@@ -1,14 +1,23 @@
 # May 8 2012: Added permissions node
 # Aug 21 2012: Added af commands
+# Nov 16 2012: Added extinguish command
+# Nov 20 2012: Added antifire.fireman permission
 
 name: AntiFire
+
 main: com.yahoo.phil_work.antifire.AntiFire
-version: 0.9.2
+
+version: 1.0.1
+
 author: Filbert66
+
 description: >
-             Fire control, for starting/placement, damage, spread. Includes logging and command to TP to last fire placement
+
+             Fire control, for starting/placement, damage, spread. Includes logging and commands to TP to last fire placement and to extinguish fires
+
 
 commands:
+
   af:
     alias: antifire
     description: Admin AntiFire command prefix
@@ -27,7 +36,12 @@ commands:
     usage: <command> [last|#|<player>] 
     permission: antifire.teleport
     permission-message: You don't have permission to teleport to fire locations
-
+  extinguish:
+    description: Put out fires at location (optional radius) or world
+    usage: <command> [#|world [all|<worldname>]] 
+    permission: antifire.fireman
+    permission-message: You don't have permission to extinguish fires
+    
 permissions:
   antifire.*:
     description: Gives access to ALL antifire features
@@ -36,6 +50,7 @@ permissions:
       antifire.logview: true
       antifire.teleport: true
       antifire.admin: true
+      antifire.fireman: true
   antifire.startfire:
     description: Allows user to start a fire. Can be overridden by fireproof blocklist
   antifire.logview:
@@ -44,6 +59,9 @@ permissions:
   antifire.teleport:
     description: Allows user to teleport to fire start locations
     default: op 
+  antifire.fireman:
+    description: Allows user to use 'extinguish' command on all worlds
+    default: op
   antifire.admin:
     description: Allows user to query & set configs & flush logs
     default: op

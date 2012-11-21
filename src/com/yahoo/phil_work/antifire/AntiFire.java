@@ -7,6 +7,7 @@
  *   8 May 2012 : PSW : Added permanent firestart log file, only written on disable
  *                      Added coloring to chat messages.
  *  21 Aug 2012 : PSW : Added 'af' admin commands, flushLog()
+ *  15 Nov 2012 : PSW : Added 'extinguish' command
  */
  
  package com.yahoo.phil_work.antifire;
@@ -36,6 +37,12 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.PluginDescriptionFile;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.Location;
+import org.bukkit.World;
+import org.bukkit.Chunk;
+import org.bukkit.block.Block;
+import org.bukkit.Material;
+import org.bukkit.Server;
+import org.bukkit.entity.Entity;
 import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
 
 import com.yahoo.phil_work.antifire.FireLogEntry;
@@ -191,7 +198,9 @@ public class AntiFire extends JavaPlugin {
 		if (commandName.equals("tpf")) {
             return tpCommand(sender, trimmedArgs);
 		}
-		
+		if (commandName.equals ("extinguish")) {
+			return extinguishCommand (sender, trimmedArgs);
+		}
         return false;
     }
 	
@@ -374,12 +383,141 @@ public class AntiFire extends JavaPlugin {
 			}
 			return true;									
 		}
-		
-		try {
-        } catch (Exception exc) {
-            exc.printStackTrace();
-        }
-        return false;
+		return false;
 	}
+    // Works now. Yay!
+	private boolean extinguishRadius (Player center, int radius) {
+		if (radius < 1)
+			return false;
+		
+		double x,y,z; 
+		int savedBlocks = 0, savedEntities= 0;
+		int fire = Material.FIRE.getId(); // 51, but let's be clear.
+		Location l = center.getLocation();
+		World w = l.getWorld();
+		
+		for (x= l.getX() - radius; x < l.getX()+ radius; x++)
+			for (y= l.getY() - radius; y < l.getY()+ radius; y++)
+				for (z= l.getZ() - radius; z < l.getZ()+ radius; z++) 
+					if (w.getBlockTypeIdAt((int)x,(int)y,(int)z) == fire) { // faster check than getBlock()
+						w.getBlockAt ((int)x,(int)y,(int)z).setType (Material.AIR); // i.e. extinguish
+						savedBlocks++;
+					}
+					
+        // Should search for entities too. By whole world? Ugh. By chunk? Possible, but not exact
+        for (Entity e : center.getNearbyEntities(radius, radius, radius)) {
+          // almost exact. It's a box, rather than a sphere, but it's a lot more efficient
+			if (e.getFireTicks() > 0) {
+				e.setFireTicks (0); // extinguish
+				savedEntities++;
+			}
+		}
+		center.sendMessage (pluginName + ": extinguished " + savedBlocks + " blocks and " + savedEntities + " entities within " +
+							radius + " blocks of you");
+		return true;
+	}
+	// Only searches loaded chunks, where fire might actually be burning
+	private boolean extinguishWorld (CommandSender sender, World w) {
+		int savedBlocks = 0, savedEntities =0, chunks=0;
+        int x,y,z;
+        
+		for (Chunk c : w.getLoadedChunks()) {
+			chunks++;	
+			// extinguish blocks
+			for (x=0; x<16; x++)
+			  for (y=0; y<128; y++)
+			    for (z=0; z<16; z++) { // gah!! This is 64k blocks
+				    Block b = c.getBlock(x,y,z);
+				  		      			    
+					if (b.getType() == Material.FIRE) {
+						b.setType (Material.AIR); // i.e. extinguish
+						savedBlocks++;
+					}
+				}
+			
+			// Now extinguish entities
+			for (Entity e : c.getEntities ()) {
+				if (e.getFireTicks() > 0) {
+					e.setFireTicks (0); // extinguish
+					savedEntities++;
+				}
+			}
+		}
+		//*DEBUG*/log.info ("Processed " + blocks + " blocks");
+		sender.sendMessage ( ((sender != null && sender instanceof Player) ? pluginName : pdfFile.getName()) + 
+						    ": extinguished " + savedBlocks + " blocks and " + savedEntities + " entities in " + 
+						    chunks + " chunks of " + w.getName());
+		return true;
+	}
+	/* extinguish [#|world [all|name]] to extinguish within block radius or entire world or all server worlds
+	 *  no params means within default radius, so only good for Players
+	 *  number command means supplied radius, so also only good for Players
+	 *  'world' param alone means current world, so only good for Players
+ 	 */
+	private boolean extinguishCommand(CommandSender sender, String[] args) 
+	{
+		boolean colors = (sender != null && sender instanceof Player) ? true : false;
+		int radius = 20;
+		Server server = sender.getServer();
+				
+		if (args.length == 0) {
+			if (colors) {
+				// default: extinguish within 20 blocks
+				return extinguishRadius ((Player)sender, radius);
+			} else {
+				log.warning ("Cannot infer world. Supply on command line.");
+				return false;
+			}
+		}
+		
+		if (args [0].equals ("world")) {
+			if (args.length == 1) {
+				if (! colors) {
+					log.warning ("Cannot infer world. Supply on command line.");
+					return false;
+				}
+				return extinguishWorld (sender, ((Player)sender).getLocation().getWorld());
+			}
+			if (args[1].equals ("all")) { // all worlds!
+				sender.sendMessage ("This may take a while...");
+				for (World w : sender.getServer().getWorlds()) {
+					extinguishWorld (sender, w);
+				}
+				return true;
+			}
+			// Extinguish in supplied world
+			for (World w : sender.getServer().getWorlds()) {
+				if (w.getName().equals (args [1])) 
+					return extinguishWorld (sender, w);
+			}					
+			sender.sendMessage ("World '" + args[1] + "' not found.");
+			return true;
+		}
+		else if (args[0].equals ("all")) {
+			sender.sendMessage ("This may take a while...");
+			for (World w : sender.getServer().getWorlds()) {
+				extinguishWorld (sender, w);
+			}
+			return true;
+		}
+		else if (! colors) {
+			log.warning ("Cannot infer location.");
+			return false;
+		}		
+		// else supplied a # and have a implied location.
+		 try {
+			radius = Integer.parseInt (args [0]);
+
+			if (radius < 0) {
+				sender.sendMessage ("negatives are invalid for radius");
+				return false;
+			}
+			return extinguishRadius ((Player)sender, radius);
+		
+		} catch (Exception exc) {
+			sender.sendMessage ("invalid value for radius");
+			return false;
+		}	
+	}	
 
 }
