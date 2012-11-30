@@ -10,6 +10,7 @@
  *                   : Added nerf_fire.nostartby.explosion
  * 21 Aug 2012 : PSW : Added param to printConfig()
  *                   : Added use of nerf_fire.logflushsecs and auto-flush feature
+ * 27 Nov 2012 : PSW : Added nostartby.fireball, logstart.fireball
  */
 
  package com.yahoo.phil_work.antifire;
@@ -99,7 +100,8 @@ public class AntiFireman implements Listener
 		plugin.getConfig().getStringList ("nerf_fire.nostartby.lava"); 
 		plugin.getConfig().getStringList ("nerf_fire.nostartby.player");  // should be user-specific (Permissions!), or could be region-based
 		plugin.getConfig().getStringList ("nerf_fire.nostartby.explosion"); 
-		
+		plugin.getConfig().getStringList ("nerf_fire.nostartby.fireball");  
+
 		if (plugin.getConfig().isString ("nerf_fire.logstart") || plugin.getConfig().isList ("nerf_fire.logstart")) // old style 
 		{
 			List <String> logstart = plugin.getConfig().getStringList ("nerf_fire.logstart"); // logs who and were in console
@@ -143,11 +145,14 @@ public class AntiFireman implements Listener
 	{
 		if (requestor == null)
 			plugin.log.config (msg);
-		else {
+		else if (requestor instanceof Player) {
 			int colon = msg.indexOf(':');
 			
 			requestor.sendMessage (ChatColor.BLUE + msg.substring(0,colon+1) + 
 								   ChatColor.GRAY + msg.substring (colon + 1, msg.length()) );
+		}
+		else { // server console, and doesn't look good in server.log
+			requestor.sendMessage (msg);
 		}
 	}
 	public boolean printConfig() 
@@ -238,7 +243,7 @@ public class AntiFireman implements Listener
 			return plugin.getConfig().getList(configkey).contains (pattern);
 		} else {
 			
-			plugin.log.fine ("ifConfigContains: configkey '" + configkey + "' not in config.yml");
+			plugin.log.finer ("ifConfigContains: configkey '" + configkey + "' not in config.yml");
 			return false;
 		}
 	}
@@ -263,9 +268,12 @@ public class AntiFireman implements Listener
 				shouldLog = ifConfigContains ("nerf_fire.logstart.lava", worldName);
 				break;
 				
-			case FIREBALL: // docs say only by player
-				if (p == null)
-					plugin.log.warning ("Expected only players to start with fireballs, per docs");
+			case FIREBALL: 
+				if (p == null) {  // docs say only by player, but can happen with plugins starting them
+					disallow = ifConfigContains ("nerf_fire.nostartby.fireball", worldName);
+					shouldLog = ifConfigContains ("nerf_fire.logstart.fireball", worldName);
+					break;
+				} // else it were a player and fall through
 			case FLINT_AND_STEEL:
 				disallow = ifConfigContains ("nerf_fire.nostartby.player", worldName);
 				shouldLog = ifConfigContains ("nerf_fire.logstart.player", worldName);
@@ -327,7 +335,7 @@ public class AntiFireman implements Listener
 					return;
 				}	
 				else {
-					plugin.log.fine (block.getType() + (whitelist ? "": " not") + " in nerf_fire.blocklist");
+					plugin.log.finer (block.getType() + (whitelist ? "": " not") + " in nerf_fire.blocklist");
 				}
 
 			

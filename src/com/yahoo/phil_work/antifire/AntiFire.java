@@ -8,6 +8,7 @@
  *                      Added coloring to chat messages.
  *  21 Aug 2012 : PSW : Added 'af' admin commands, flushLog()
  *  15 Nov 2012 : PSW : Added 'extinguish' command
+ *  24 Nov 2012 : PSW : Added 'reload' command
  */
  
  package com.yahoo.phil_work.antifire;
@@ -345,6 +346,12 @@ public class AntiFire extends JavaPlugin {
 			this.saveConfig();
 			return true;									
 		}
+		else if (commandName.equals("reload")) {
+			this.reloadConfig();
+			this.antiFire.initConfig();
+			return true;									
+		}
+
 		else if (commandName.equals("flush")) {
 			flushLog(sender);
 			return true;									

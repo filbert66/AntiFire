@@ -4,7 +4,8 @@ nerf_fire:
   logstart:
     player: world
     lightning: world
-#   lava: 
+#    lava: 
+#    fireball: 
   whitelist: false
   nospread: world
   nostartby:
@@ -17,6 +18,7 @@ nerf_fire:
 #    player:
 #      - world
 #    explosion: world
+#    fireball: world
   nodamageto:
 #    block: world
 #    player:
