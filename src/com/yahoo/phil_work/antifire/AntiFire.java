@@ -9,6 +9,7 @@
  *  21 Aug 2012 : PSW : Added 'af' admin commands, flushLog()
  *  15 Nov 2012 : PSW : Added 'extinguish' command
  *  24 Nov 2012 : PSW : Added 'reload' command
+ *  12 Dec 2012 : PSW : Added "last" option to "extinguish" command, and Player name.
  */
  
  package com.yahoo.phil_work.antifire;
@@ -38,6 +39,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.PluginDescriptionFile;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.Location;
+import org.bukkit.util.Vector;
 import org.bukkit.World;
 import org.bukkit.Chunk;
 import org.bukkit.block.Block;
@@ -392,16 +394,47 @@ public class AntiFire extends JavaPlugin {
 		}
 		return false;
 	}
-    // Works now. Yay!
-	private boolean extinguishRadius (Player center, int radius) {
+	
+	private List <Entity> getNearbyEntities (Location loc, int radius) {
+		Chunk center = loc.getChunk();
+		List <Entity> eList = new ArrayList ();
+		int chunks = 1;
+		
+		// Process local chunk
+		for (Entity e: center.getEntities()) {
+			if (loc.distance (e.getLocation()) <= radius) { // within range
+				eList.add (e);
+			}
+		}
+		// Process nearby chunks (could be only +1 away!)
+		double centerX = center.getX(), centerZ = center.getZ();
+			
+		for (double i = -radius ; i<radius; i += 16) // increment by chunk size
+			for (double j = -radius; j < radius; j += 16) {
+				Vector newL = loc.toVector().add (new Vector (i, 0, j));
+			 	Chunk newChunk = newL.toLocation(loc.getWorld()).getChunk();
+			 	if (newChunk.getX() != centerX || newChunk.getZ() != centerZ) {
+			 		chunks++;													
+					for (Entity e: newChunk.getEntities()) {
+						if (loc.distance (e.getLocation()) <= radius) { // within range
+							eList.add (e);
+						}
+					}
+				}
+			}
+		//* DEBUG */ log.fine ("getNearbyEntities (loc, " + radius + ") processed " + chunks + " chunks, found " + eList.size() + " entities");
+		return eList;
+	}		
+	
+	private boolean extinguishRadius (CommandSender sender, Location l, int radius) {
 		if (radius < 1)
 			return false;
 		
 		double x,y,z; 
 		int savedBlocks = 0, savedEntities= 0;
 		int fire = Material.FIRE.getId(); // 51, but let's be clear.
-		Location l = center.getLocation();
 		World w = l.getWorld();
+		List <Entity> eList;
 		
 		for (x= l.getX() - radius; x < l.getX()+ radius; x++)
 			for (y= l.getY() - radius; y < l.getY()+ radius; y++)
@@ -410,19 +443,49 @@ public class AntiFire extends JavaPlugin {
 						w.getBlockAt ((int)x,(int)y,(int)z).setType (Material.AIR); // i.e. extinguish
 						savedBlocks++;
 					}
-					
-        // Should search for entities too. By whole world? Ugh. By chunk? Possible, but not exact
-        for (Entity e : center.getNearbyEntities(radius, radius, radius)) {
-          // almost exact. It's a box, rather than a sphere, but it's a lot more efficient
+/*
+		if (sender instanceof Player) {					
+			// Should search for entities too. By whole world? Ugh. By chunk? Possible, but not exact
+		    // almost exact. It's a box, rather than a sphere, but it's a lot more efficient
+			eList = ((Player)sender).getNearbyEntities(radius, radius, radius);
+		} else 
+*/
+			eList = getNearbyEntities (l, radius);
+
+		for (Entity e : eList) {
 			if (e.getFireTicks() > 0) {
 				e.setFireTicks (0); // extinguish
 				savedEntities++;
 			}
 		}
-		center.sendMessage (pluginName + ": extinguished " + savedBlocks + " blocks and " + savedEntities + " entities within " +
-							radius + " blocks of you");
+
+		String message = "extinguished " + savedBlocks + " blocks and " + savedEntities + " entities within " + radius + " blocks of ";
+		if (sender != null && sender instanceof Player)	{
+		  if (l.equals (((Player)sender).getLocation())) 
+		     sender.sendMessage (pluginName + ": " + message + "you");
+		  else 
+		     sender.sendMessage (pluginName + " : " + message + l.toString());
+  		} else if (sender != null)
+		     sender.sendMessage (pdfFile.getName() + ": " + message + l.toString());
+		   
 		return true;
 	}
+		
+
+    // Normally used by a player to extinguish around himself
+	private boolean extinguishRadius (Player center, int radius) {
+		return extinguishRadius (center, center.getLocation(), radius);
+	}
+    // Normally used by console or Op to extinguish around someone else
+	private boolean extinguishRadius (CommandSender sender, Player center, int radius) {
+		boolean value = extinguishRadius (sender, center.getLocation(), radius);
+		
+		if (value)
+			center.sendMessage (pluginName + ": " + sender.getName() + " extinguished fire around you");
+		
+		return value;
+	}
+	
 	// Only searches loaded chunks, where fire might actually be burning
 	private boolean extinguishWorld (CommandSender sender, World w) {
 		int savedBlocks = 0, savedEntities =0, chunks=0;
@@ -466,6 +529,7 @@ public class AntiFire extends JavaPlugin {
 		boolean colors = (sender != null && sender instanceof Player) ? true : false;
 		int radius = 20;
 		Server server = sender.getServer();
+		String param;
 				
 		if (args.length == 0) {
 			if (colors) {
@@ -476,8 +540,9 @@ public class AntiFire extends JavaPlugin {
 				return false;
 			}
 		}
+		else param = args[0].toLowerCase();
 		
-		if (args [0].equals ("world")) {
+		if (param.equals ("world")) {
 			if (args.length == 1) {
 				if (! colors) {
 					log.warning ("Cannot infer world. Supply on command line.");
@@ -500,14 +565,60 @@ public class AntiFire extends JavaPlugin {
 			sender.sendMessage ("World '" + args[1] + "' not found.");
 			return true;
 		}
-		else if (args[0].equals ("all")) {
+		else if (param.equals ("all")) {
 			sender.sendMessage ("This may take a while...");
 			for (World w : sender.getServer().getWorlds()) {
 				extinguishWorld (sender, w);
 			}
 			return true;
 		}
-		else if (! colors) {
+		else if (param.equals ("last")) {
+			FireLogEntry logEntry;
+
+			if (args.length == 1) { // no param
+				try {
+					logEntry = fireLog.list.getLast();
+				} catch (NoSuchElementException exc) {
+					logEntry = null;
+				}
+				if (logEntry == null) {
+					sender.sendMessage (pluginName + ": no entries in log!");
+					return true;
+				}
+			} else if (args [1].length() == 1 && Character.isDigit(args[1].charAt(0))) {
+				// # format, meaning back up # 
+				logEntry = fireLog.lastMinus (Integer.parseInt(args[1]));
+				if (logEntry == null) {
+					sender.sendMessage (pluginName + ": too far back in log");
+					return true;
+				}
+			} else { // try to parse as a player name. BUG: Crash on multi-digit "name"
+				String n = args [1];
+				if ( !validName (n)) {
+					sender.sendMessage(ChatColor.RED + "bad player name '" + n + "'");
+					return true;
+				} else if ( !sender.getServer().getOfflinePlayer(n).hasPlayedBefore()) {
+					sender.sendMessage ("'" + n + "' has never played before");
+					return true;
+				}
+				logEntry = fireLog.lastBy (n);
+				if (logEntry == null) {
+					sender.sendMessage (pluginName + ": no entries in log for " + n);
+					return true;
+				}			
+			}
+			// If got here, have a valid log entry
+			return extinguishRadius (sender, logEntry.loc, radius);
+		}	
+		else if (validName (args[0])) {
+			// extinguish around supplied player
+			Player p = getServer().getPlayer(args[0]);
+			if (p == null) {
+				sender.sendMessage ("Cannot find player '" + args[0] + "' online");
+				return true;
+			}
+			return extinguishRadius (sender, p, radius);
+		} else if (! colors) {
 			log.warning ("Cannot infer location.");
 			return false;
 		}		
