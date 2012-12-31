@@ -11,6 +11,7 @@
  * 21 Aug 2012 : PSW : Added param to printConfig()
  *                   : Added use of nerf_fire.logflushsecs and auto-flush feature
  * 27 Nov 2012 : PSW : Added nostartby.fireball, logstart.fireball
+ * 30 Dec 2012 : PSW : Check FireResistantList in BlockBurnEvent; use getTargetBlock()
  */
 
  package com.yahoo.phil_work.antifire;
@@ -45,9 +46,7 @@ import org.bukkit.Location;
 import org.bukkit.World;
 import	org.bukkit.block.Block;
 import	org.bukkit.block.BlockState;
-//import org.bukkit.block.ContainerBlock;
 import org.bukkit.material.MaterialData;
-import org.bukkit.craftbukkit.CraftWorld;
 import org.bukkit.Effect;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
@@ -64,8 +63,6 @@ import org.bukkit.ChatColor;
 
 
 //import org.bukkit.inventory.ItemStack;
-//import org.bukkit.craftbukkit.CraftServer;
-//import org.bukkit.craftbukkit.CraftWorld;
 import org.bukkit.Bukkit;
 
 import com.yahoo.phil_work.BlockId;
@@ -257,7 +254,8 @@ public class AntiFireman implements Listener
 	{	
 		Player p = event.getPlayer();
 		String worldName = event.getBlock().getWorld().getName();
-
+		Block target = null;
+		
 		boolean disallow = false;
 		boolean shouldLog = false;
 		Level loglevel = Level.FINE;
@@ -288,6 +286,8 @@ public class AntiFireman implements Listener
 				}
 				if (disallow) 			
 					p.sendMessage (plugin.pluginName + " says you don't have fire start permissions");
+				else if (event.getCause() == BlockIgniteEvent.IgniteCause.FLINT_AND_STEEL) // if fireball, he might have looked away
+					target = p.getTargetBlock(null, 5); // what is he trying to ignite w/in clickable distance?
 				loglevel = Level.INFO;
 				break;
 				
@@ -316,7 +316,7 @@ public class AntiFireman implements Listener
 		else {  // check FireresistantList first
 			boolean whitelist = plugin.getConfig().getBoolean ("nerf_fire.whitelist");
 			Location loc = event.getBlock().getLocation();
-			Block block = getBurningBlockFrom(loc);
+			Block block = (target != null ? target : getBurningBlockFrom(loc));
 			if (block == null)
 				block = event.getBlock();
 
@@ -418,6 +418,19 @@ public class AntiFireman implements Listener
 			// will this put the fire out, or will it burn indefinitely like netherack?
 			// Burns indefinitely.
 		}
+		else if ( !FireResistantList.isEmpty()) {
+			boolean whitelist = plugin.getConfig().getBoolean ("nerf_fire.whitelist");
+			Block block = event.getBlock();
+			BlockId b = new BlockId (block.getTypeId(), block.getData());
+
+			// Checking for whitelist (list of IDs to burn) or blacklist (IDs to not burn)
+			if ((whitelist && !FireResistantList.contains (b)) || 
+				( !whitelist && FireResistantList.contains (b)) )
+			{
+				plugin.log.fine ("blocked fire destroying a resistant block type " + block.getType() + " in " + worldName);
+				event.setCancelled (true);
+			}	
+		}			
 	}	
 	
 	@EventHandler (ignoreCancelled = true)
