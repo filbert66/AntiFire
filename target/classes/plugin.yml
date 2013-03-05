@@ -5,12 +5,13 @@
 # Nov 24 2012: Added reload, nostartby.fireball, logstart.fireball
 # Dec 4  2012: Bumped version for bugfix
 # Dec 12 2012: added last option for extinguish
+# Feb 20 2013: added logstart, nostartby, nodamageto
 
 name: AntiFire
 
 main: com.yahoo.phil_work.antifire.AntiFire
 
-version: 1.3
+version: 1.4.1
 
 author: Filbert66
 
@@ -24,7 +25,8 @@ commands:
   af:
     alias: antifire
     description: Admin AntiFire command prefix
-    usage: <command> print|flush|save|reload|fireproof [\#]|burnable [\#]|spread [on|off]
+    usage: <command> print|flush|save|reload|fireproof [\#]|burnable [\#]|spread [on|off]| Further config options at http://bit.ly/YdIKa3
+# |logstart [player|lightning|lava|fireball [true|false [all]]]|nostart[by] [lava|lightning|fireball|player|explosion [true|false [all]]]|nodamage[to] [block|player.from(lava|fire)|nonplayer.from(lava|fire) [true|false [all]]]|opstart true|false
     permission: antifire.admin
   log:
     alias: lf

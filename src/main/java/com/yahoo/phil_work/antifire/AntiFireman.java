@@ -74,7 +74,11 @@ public class AntiFireman implements Listener
 {
 	private final AntiFire plugin;
 	public	BlockIdList FireResistantList;
-
+	
+	// Metrics
+	public int logEntries = 0, fireProofed = 0, nerfedStart=0;
+	
+	
 	public AntiFireman (AntiFire instance)
 	{
 		this.plugin = instance;
@@ -236,11 +240,11 @@ public class AntiFireman implements Listener
 			return ifStringContains (configVal, pattern);
 
 		} else if (plugin.getConfig().isList (configkey)) {
-			// plugin.log.finer ("Testing '" + configkey + "' as a list for '" + pattern + "'");
+			//plugin.log.finer ("Testing '" + configkey + "' as a list for '" + pattern + "'");
 			return plugin.getConfig().getList(configkey).contains (pattern);
 		} else {
 			
-			plugin.log.finer ("ifConfigContains: configkey '" + configkey + "' not in config.yml");
+			// plugin.log.finer ("ifConfigContains: configkey '" + configkey + "' not in config.yml");
 			return false;
 		}
 	}
@@ -312,6 +316,7 @@ public class AntiFireman implements Listener
 		if (disallow) {
 			plugin.log.log (loglevel, "blocked fire start by " + (p != null ? p.getDisplayName():event.getCause()) + " in " + worldName);
 			event.setCancelled (true);
+			this.nerfedStart++;
 		}
 		else {  // check FireresistantList first
 			boolean whitelist = plugin.getConfig().getBoolean ("nerf_fire.whitelist");
@@ -332,6 +337,7 @@ public class AntiFireman implements Listener
 						p.sendMessage (plugin.pluginName + " says block " + 
 									   block.getType() + (b.hasData() ? ":"+ block.getData():"") + " is fire resistant");
 					event.setCancelled (true);
+					this.fireProofed++;
 					return;
 				}	
 				else {
@@ -349,6 +355,8 @@ public class AntiFireman implements Listener
 				}
 				plugin.log.info (plugin.fireLog.list.getLast().toStringNoDate(false));  // logger already includes date
 				// plugin.log.fine ("Found " + worldName + " in nerf_fire.logstart");
+				
+				logEntries++;
 			}
 			else
 				plugin.log.log (loglevel, "Allowing fire start by " + (p != null ? p.getDisplayName():event.getCause()) + " in " + worldName);
@@ -363,15 +371,17 @@ public class AntiFireman implements Listener
 		Location test = new Location (loc.getWorld(), x, y, z);
 		
 		Block b = test.getBlock ();
-		plugin.log.finest ("Checking burner of type " + b.getType() + " at " + test);
-		if (b.getType() !=  Material.AIR)
+		Material m = b.getType();
+		plugin.log.finest ("Checking burner of type " + m + " at " + test);
+		if (m !=  Material.AIR && m != Material.FIRE)
 			return b;
 		
 		y = loc.getY() - 1d;  // underneath
 		test = new Location (loc.getWorld(), x, y, z);
 		b = test.getBlock ();
-		plugin.log.finest ("Checking burner of type " + b.getType() + " under at " + test);
-		if (b.getType() !=  Material.AIR)
+		 m = b.getType();
+		plugin.log.finest ("Checking burner of type " + m + " under at " + test);
+		if (m !=  Material.AIR && m != Material.FIRE)
 			return b;
 		y += 1;
 		
@@ -379,8 +389,9 @@ public class AntiFireman implements Listener
 		for (x = loc.getX() - 1d; x <= (loc.getX() + 1d); x+=2d) {
 			test = new Location (loc.getWorld(), x, y, z);
 			b = test.getBlock ();
-			plugin.log.finest ("Checking burner of type " + b.getType() + " at X " + test);
-			if (b.getType() !=  Material.AIR)
+			 m = b.getType();
+			plugin.log.finest ("Checking burner of type " + m + " at X " + test);
+			if (m !=  Material.AIR && m != Material.FIRE)
 				return b;
 		}
 		x = loc.getX();
@@ -388,8 +399,9 @@ public class AntiFireman implements Listener
 		for (z = loc.getZ() - 1d; z <= (loc.getZ() + 1d); z+=2d) {
 			test = new Location (loc.getWorld(), x, y, z);
 			b = test.getBlock ();
-			plugin.log.finest ("Checking burner of type " + b.getType() + " at Z " + test);
-			if (b.getType() !=  Material.AIR)
+			 m = b.getType();
+			plugin.log.finest ("Checking burner of type " + m + " at Z " + test);
+			if (m !=  Material.AIR && m != Material.FIRE)
 				return b;
 		}
 		z = loc.getZ();
@@ -398,8 +410,9 @@ public class AntiFireman implements Listener
 		y = loc.getY() + 1d;  // underneath
 		test = new Location (loc.getWorld(), x, y, z);
 		b = test.getBlock ();
-		plugin.log.finest ("Checking burner of type " + b.getType() + " above " + test);
-		if (b.getType() !=  Material.AIR)
+		 m = b.getType();
+		plugin.log.finest ("Checking burner of type " +m + " above " + test);
+		if (m !=  Material.AIR && m != Material.FIRE)
 			return b;
 		y -= 1;
 		
@@ -411,6 +424,7 @@ public class AntiFireman implements Listener
 	public void onFireDestroyBlock (BlockBurnEvent event)
 	{
 		String worldName = event.getBlock().getWorld().getName();
+		boolean stopEvent = false;
 				
 		if (ifConfigContains ("nerf_fire.nodamageto.block", worldName)) {
 			plugin.log.finer ("stopped block (" + event.getBlock().getType() + ") destruction by fire in " + worldName);
@@ -428,10 +442,69 @@ public class AntiFireman implements Listener
 				( !whitelist && FireResistantList.contains (b)) )
 			{
 				plugin.log.fine ("blocked fire destroying a resistant block type " + block.getType() + " in " + worldName);
-				event.setCancelled (true);
+				event.setCancelled (true); // stops breaking, but not fire, on resistant block
+				
+				Block fireLoc = getFireBlockFrom (block.getLocation());
+				if (fireLoc != null) {
+					// found an adjacent burning location
+					plugin.log.finer ("stopped fire on resistant block type at " + fireLoc.getLocation());
+					fireLoc.setType (Material.AIR);
+				}	
 			}	
-		}			
+		}	
 	}	
+	
+	// Fire burns above, or if something is there, along the side of a block
+	// May return a fire block that is also adjacent to a burnable block, but regardless it is adjacent to supplied block. 
+	private Block getFireBlockFrom (final Location loc) {
+		double x = loc.getX(), y = loc.getY(), z= loc.getZ();
+		
+		Location test = new Location (loc.getWorld(), x, y, z);
+		
+		Block b = test.getBlock ();
+		plugin.log.finest ("Checking for fire at type " + b.getType() + " at " + test);
+		if (b.getType() ==  Material.FIRE)
+			return b;
+		
+		y = loc.getY() - 1d;  // underneath
+		test = new Location (loc.getWorld(), x, y, z);
+		b = test.getBlock ();
+		plugin.log.finest ("Checking for fire at type " + b.getType() + " under at " + test);
+		if (b.getType() ==  Material.FIRE)
+			return b;
+		y += 1;
+		
+		// Look around. Not sure which might have started it, but look on X first
+		for (x = loc.getX() - 1d; x <= (loc.getX() + 1d); x+=2d) {
+			test = new Location (loc.getWorld(), x, y, z);
+			b = test.getBlock ();
+			plugin.log.finest ("Checking for fire at type " + b.getType() + " at X " + test);
+			if (b.getType() ==  Material.FIRE)
+				return b;
+		}
+		x = loc.getX();
+
+		for (z = loc.getZ() - 1d; z <= (loc.getZ() + 1d); z+=2d) {
+			test = new Location (loc.getWorld(), x, y, z);
+			b = test.getBlock ();
+			plugin.log.finest ("Checking for fire at type " + b.getType() + " at Z " + test);
+			if (b.getType() ==  Material.FIRE)
+				return b;
+		}
+		z = loc.getZ();
+		
+		// Check above?
+		y = loc.getY() + 1d;  // underneath
+		test = new Location (loc.getWorld(), x, y, z);
+		b = test.getBlock ();
+		plugin.log.finest ("Checking for fire at type " + b.getType() + " above " + test);
+		if (b.getType() ==  Material.FIRE)
+			return b;
+		y -= 1;
+		
+		plugin.log.fine ("Unable to find burning source for " + loc);
+		return null;
+	}
 	
 	@EventHandler (ignoreCancelled = true)
 	public void onEntityCombust (EntityCombustEvent event) {
@@ -574,7 +647,7 @@ public class AntiFireman implements Listener
 			event.setCancelled (true);
 		}
 		
-		if (makeLog) plugin.log.finer ("nerf_fire: caught " + event.getCause() + " damaging " + damagee.getType());
+		// if (makeLog) plugin.log.finer ("nerf_fire: caught " + event.getCause() + " damaging " + damagee.getType());
 	}
 	@EventHandler (ignoreCancelled = true)
 	public void  onFireblockDamageEntity (EntityDamageByBlockEvent event) {

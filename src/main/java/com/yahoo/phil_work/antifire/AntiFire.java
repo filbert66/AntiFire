@@ -10,6 +10,7 @@
  *  15 Nov 2012 : PSW : Added 'extinguish' command
  *  24 Nov 2012 : PSW : Added 'reload' command
  *  12 Dec 2012 : PSW : Added "last" option to "extinguish" command, and Player name.
+ *  12 Jan 2013 : PSW : Add commands for logstart, nodamageto
  */
  
  package com.yahoo.phil_work.antifire;
@@ -19,6 +20,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.Set;
+import java.util.HashSet;
 import java.util.Map;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -48,6 +51,8 @@ import org.bukkit.Server;
 import org.bukkit.entity.Entity;
 import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
 
+import org.mcstats.Metrics;
+
 import com.yahoo.phil_work.antifire.FireLogEntry;
 import com.yahoo.phil_work.antifire.AntifireLog;
 import com.yahoo.phil_work.BlockIdList;
@@ -71,6 +76,10 @@ public class AntiFire extends JavaPlugin {
 	private BufferedWriter logFileWriter;
 	public String pluginName; // contains chat color controls
 	
+	// Metrics
+	private int blocksSaved = 0, entitiesSaved = 0;
+	private int logQueries = 0, teleports = 0, extinguishCommands = 0;
+
 	public void flushLog (CommandSender requestor) {
 		this.flushLog (requestor, 0);  // zero seconds from Now
 	}
@@ -172,6 +181,84 @@ public class AntiFire extends JavaPlugin {
 
 		antiFire.printConfig();
 
+		// Add Metrics to mcstats.org
+		try {
+			Metrics metrics = new Metrics(this);
+			
+			Metrics.Graph graph = metrics.createGraph("Extinguished");
+			graph.addPlotter(new Metrics.Plotter("Commands executed") {
+		
+					@Override
+					public int getValue() {
+							return extinguishCommands; 
+					}
+			});
+
+			graph.addPlotter(new Metrics.Plotter("Blocks") {
+		
+					@Override
+					public int getValue() {
+							return blocksSaved; 
+					}
+			});
+		
+			graph.addPlotter(new Metrics.Plotter("Entities") {
+		
+					@Override
+					public int getValue() {
+							return entitiesSaved;
+					}
+			});
+
+			metrics.addCustomData(new Metrics.Plotter("Total Log Queries") {
+		
+				@Override
+				public int getValue() {
+					return logQueries;
+				}
+		
+			});
+
+			metrics.addCustomData(new Metrics.Plotter("Total Teleports to Firestarts") {
+		
+				@Override
+				public int getValue() {
+					return teleports;
+				}
+		
+			});
+
+			metrics.addCustomData(new Metrics.Plotter("Log Entries") {
+		
+				@Override
+				public int getValue() {
+					return antiFire.logEntries;
+				}
+		
+			});
+			metrics.addCustomData(new Metrics.Plotter("Fireproofed starts") {
+		
+				@Override
+				public int getValue() {
+					return antiFire.fireProofed;
+				}
+		
+			});
+			metrics.addCustomData(new Metrics.Plotter("Nerfed starts") {
+		
+				@Override
+				public int getValue() {
+					return antiFire.nerfedStart;
+				}
+		
+			});
+
+			metrics.start();
+		} catch (IOException e) {
+			// Failed to submit the stats :-(
+			log.warning ("Unable to start mcstats.org metrics: " +e);
+		}
+
         log.info ("enabled, brought to you by Filbert66"); 
     }
 
@@ -196,12 +283,14 @@ public class AntiFire extends JavaPlugin {
             return afCommands(sender, trimmedArgs);
 		}
 		if (commandName.equals("log")) {
+			this.logQueries++;
 			return logCommand (sender, trimmedArgs);
 		}
 		if (commandName.equals("tpf")) {
             return tpCommand(sender, trimmedArgs);
 		}
 		if (commandName.equals ("extinguish")) {
+			this.extinguishCommands++;
 			return extinguishCommand (sender, trimmedArgs);
 		}
         return false;
@@ -297,6 +386,9 @@ public class AntiFire extends JavaPlugin {
 		}
 		p.teleport (logEntry.loc, TeleportCause.COMMAND);	
 		p.sendMessage (logEntry.toStringNoLoc(/*colors=*/true)); 
+		
+		this.teleports++;
+		
 		return true;
 	}		
 
@@ -392,6 +484,140 @@ public class AntiFire extends JavaPlugin {
 			}
 			return true;									
 		}
+		
+		else if (commandName.equals ("opstart")) {
+			boolean ifSet = this.getConfig().getBoolean ("nerf_fire.nostartby.op");
+			
+			if (args.length == 1) {
+				sender.sendMessage ("OPs are " + (ifSet ? "" : ChatColor.RED + "NOT " + ChatColor.RESET) + "allowed to start fires");
+				return true;
+			}
+			// else have a param
+			boolean turnOn = args[1].toLowerCase().equals ("true");
+			this.getConfig().set ("nerf_fire.nostartby.op", !turnOn);
+			sender.sendMessage (ChatColor.BLUE + "nerf_fire.nostartby.op" + ChatColor.DARK_BLUE + 
+								" now " + ChatColor.GRAY + !turnOn);
+			return true;
+		}				
+
+		// All world lists params
+		else if ((commandName.indexOf ("nostart") != -1) || 
+				 (commandName.indexOf ("nodamage") != -1) ||
+				 commandName.equals ("logstart") )
+		{				 
+			String node;
+			Set<String> leafNames;
+
+			if (commandName.indexOf ("nostart") != -1) 			
+			{ 
+				node = "nostartby";
+				leafNames = new HashSet<String>(Arrays.asList("lava", "lightning", "fireball", "player", "explosion"));
+			}
+			else if (commandName.indexOf ("nodamage") != -1) {
+				node = "nodamageto";
+				leafNames = new HashSet<String>(Arrays.asList("block", "player.fromlava", "player.fromfire", "nonplayer.fromlava", "nonplayer.fromfire"));
+			}
+			else if (commandName.equals ("logstart")) {
+				node = commandName;
+				leafNames = new HashSet<String>(Arrays.asList("player", "lava", "lightning", "fireball"));
+			}
+			else {
+				return false;
+				}
+						
+			if (args.length == 1) {
+				if ( !(sender instanceof Player)) { // no params or can't impute world
+					sender.sendMessage ("Can't infer world of SERVER");
+					return false;
+				}
+				else {
+					String wName = ((Player)sender).getLocation().getWorld().getName();
+					String activeTriggers = "";
+					
+					for (String s : leafNames) {						
+						if (antiFire.ifConfigContains ("nerf_fire." + node + "." + s, wName))
+							activeTriggers += s + " ";
+					}
+					if (activeTriggers.length() == 0)
+						activeTriggers = "nothing";
+						
+					if (node.equals ("nostartby"))	
+						sender.sendMessage ("The following are UNable to start fires in your world: " + 
+											ChatColor.YELLOW + activeTriggers);
+					else if (node.equals ("logstart"))
+						sender.sendMessage ("Logging in your world is active for starts by: " + 
+										ChatColor.YELLOW + activeTriggers);
+					else if (node.equals ("nodamageto"))
+						sender.sendMessage ("The following are safe from damage by fires in your world: " + 
+											ChatColor.YELLOW + activeTriggers);					
+				}
+			} else {
+				// have a parameter
+				String wName;
+				if ( !(sender instanceof Player)) {
+					if (args.length < 4) {
+						sender.sendMessage (pdfFile.getName() + ": Only support setting ALL from SERVER");
+						return false;
+					} else {
+						wName = "fooblitzki"; // nonsense for now
+					}
+				} else
+					 wName = ((Player)sender).getLocation().getWorld().getName();
+
+				String item = args[1].toLowerCase();
+				String logConfig;
+				boolean ActiveInWorld;
+				
+				if ( !leafNames.contains (item)) {
+					sender.sendMessage ("invalid " + node + " item:" + item);
+					return false;
+				}
+				else
+					logConfig = "nerf_fire." + node + "." + item;
+				ActiveInWorld = antiFire.ifConfigContains (logConfig, wName);
+
+				List <String> newLog = (this.getConfig().isString (logConfig) ?
+											new ArrayList(Arrays.asList(getConfig().getString (logConfig).split(","))) : 
+											getConfig().getStringList (logConfig) );
+				this.log.fine ("Current " + logConfig + "=" + newLog);
+				if (args.length == 2) { // no setting. Assume means turn on due to "nostart"
+					if (ActiveInWorld) {
+						if (node.equals ("nostartby"))	
+							sender.sendMessage (item + " is already disabled from starting fires for this world");
+						else if (node.equals ("logstart"))
+							sender.sendMessage ("Logging for " + item + " is already active for this world");
+						else if (node.equals ("nodamageto"))
+							sender.sendMessage (item + " is already safe from fire damage in this world");
+						return true;
+					}
+					else 
+						newLog.add (wName);
+				} else { // have a param				
+					boolean turnOn = args[2].toLowerCase().equals ("true");
+					
+					if (args.length == 3) {
+					  // only on/off param				
+						if (turnOn && !ActiveInWorld) { 
+							newLog.add (wName);
+						}
+						else if (!turnOn && ActiveInWorld)
+							newLog.remove (wName);
+					} else if (args[3].toLowerCase().equals("all")) { 
+						newLog.clear(); // if off
+
+						if (turnOn) {
+						  for (World w : sender.getServer().getWorlds()) 
+						    	newLog.add (w.getName());
+						}
+					}
+				}				
+				this.getConfig().set (logConfig, newLog);
+				sender.sendMessage (ChatColor.BLUE + logConfig + ChatColor.DARK_BLUE + 
+									" now effective in: " + ChatColor.GRAY + newLog);
+			}
+			return true;									
+		}			
+					
 		return false;
 	}
 	
@@ -467,6 +693,9 @@ public class AntiFire extends JavaPlugin {
 		     sender.sendMessage (pluginName + " : " + message + l.toString());
   		} else if (sender != null)
 		     sender.sendMessage (pdfFile.getName() + ": " + message + l.toString());
+		
+		this.entitiesSaved += savedEntities;
+		this.blocksSaved += savedBlocks;
 		   
 		return true;
 	}
@@ -517,6 +746,10 @@ public class AntiFire extends JavaPlugin {
 		sender.sendMessage ( ((sender != null && sender instanceof Player) ? pluginName : pdfFile.getName()) + 
 						    ": extinguished " + savedBlocks + " blocks and " + savedEntities + " entities in " + 
 						    chunks + " chunks of " + w.getName());
+						    
+		this.entitiesSaved += savedEntities;
+		this.blocksSaved += savedBlocks;
+
 		return true;
 	}
 	/* extinguish [#|world [all|name]] to extinguish within block radius or entire world or all server worlds
