@@ -12,6 +12,8 @@
  *                   : Added use of nerf_fire.logflushsecs and auto-flush feature
  * 27 Nov 2012 : PSW : Added nostartby.fireball, logstart.fireball
  * 30 Dec 2012 : PSW : Check FireResistantList in BlockBurnEvent; use getTargetBlock()
+ * 20 Mar 2013 : PSW : Changed logging level on noLogging;
+ *                     onFireDestroyBlock: added check to prevent burnt block if new location is fire resistant. 
  */
 
  package com.yahoo.phil_work.antifire;
@@ -288,11 +290,12 @@ public class AntiFireman implements Listener
 						plugin.log.fine (p.getDisplayName() + " has permission .startfire. Overriding nostartby.player");
 					}
 				}
-				if (disallow) 			
+				if (disallow)  {			
 					p.sendMessage (plugin.pluginName + " says you don't have fire start permissions");
+					loglevel = Level.INFO;
+				}
 				else if (event.getCause() == BlockIgniteEvent.IgniteCause.FLINT_AND_STEEL) // if fireball, he might have looked away
 					target = p.getTargetBlock(null, 5); // what is he trying to ignite w/in clickable distance?
-				loglevel = Level.INFO;
 				break;
 				
 			case LIGHTNING:// need to test
@@ -451,6 +454,34 @@ public class AntiFireman implements Listener
 					fireLoc.setType (Material.AIR);
 				}	
 			}	
+			else  // have fire resistance, burning block is not resistant, but block underneath might be
+			{
+				// remove non-resistant block so following call doesn't return this one
+				event.getBlock().setType (Material.AIR);
+				
+				// Check to see if we should allow spread of the displaced block
+				if ( ifConfigContains ("nerf_fire.nospread", worldName)) {
+					event.setCancelled (true); // don't allow burnt block to become FIRE
+					return;
+				}
+
+				Block newBurner = getBurningBlockFrom (block.getLocation());
+				if (newBurner != null) {
+					// this block would be burning by NMS default handling
+					b = new BlockId (newBurner.getTypeId(), newBurner.getData());
+					
+					if ((whitelist && !FireResistantList.contains (b)) || 
+						( !whitelist && FireResistantList.contains (b)) )
+					{
+						event.setCancelled (true); // stop processing and setting this on fire
+						plugin.log.fine ("blocked fire restarting on a resistant block type " + newBurner.getType() + " in " + worldName);
+					}
+				}	
+			}
+		// else damage blocks, no fire resistance, but check for nospread
+		} else if ( ifConfigContains ("nerf_fire.nospread", worldName)) {
+			event.setCancelled (true); // prevent any spread by default NMS code
+			event.getBlock().setType (Material.AIR); // block damaged
 		}	
 	}	
 	
