@@ -14,13 +14,18 @@
  * 30 Dec 2012 : PSW : Check FireResistantList in BlockBurnEvent; use getTargetBlock()
  * 20 Mar 2013 : PSW : Changed logging level on noLogging;
  *                     onFireDestroyBlock: added check to prevent burnt block if new location is fire resistant. 
+ *             : PSW : Handle new BlockIgniteEvent.getIgnitingBlock() and event.getIgnitingEntity()
+ * 5  Apr 2013 : PSW : Add new nerf_fire.wooddropscharcoal; 
+ *					   Handle new ENDER_CRYSTAL and EXPLOSION causes.
+ *                     nodamageto.player.fromfire now works when entities light players on fire
+ *                     Add nerf_fire.noburnentityby.player, permission antifire.burnentity.
  */
 
  package com.yahoo.phil_work.antifire;
 
  
  import java.util.List;
-// import java.util.Random;
+ import java.util.Random;
  import java.util.logging.Logger;
 import java.util.Collection;
 import java.util.LinkedList;
@@ -49,6 +54,7 @@ import org.bukkit.World;
 import	org.bukkit.block.Block;
 import	org.bukkit.block.BlockState;
 import org.bukkit.material.MaterialData;
+import org.bukkit.CoalType;
 import org.bukkit.Effect;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
@@ -64,7 +70,7 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.ChatColor;
 
 
-//import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.Bukkit;
 
 import com.yahoo.phil_work.BlockId;
@@ -76,6 +82,7 @@ public class AntiFireman implements Listener
 {
 	private final AntiFire plugin;
 	public	BlockIdList FireResistantList;
+	private static final Random rng = new Random();
 	
 	// Metrics
 	public int logEntries = 0, fireProofed = 0, nerfedStart=0;
@@ -104,6 +111,7 @@ public class AntiFireman implements Listener
 		plugin.getConfig().getStringList ("nerf_fire.nostartby.player");  // should be user-specific (Permissions!), or could be region-based
 		plugin.getConfig().getStringList ("nerf_fire.nostartby.explosion"); 
 		plugin.getConfig().getStringList ("nerf_fire.nostartby.fireball");  
+		plugin.getConfig().getStringList ("nerf_fire.nostartby.crystal");
 
 		if (plugin.getConfig().isString ("nerf_fire.logstart") || plugin.getConfig().isList ("nerf_fire.logstart")) // old style 
 		{
@@ -114,12 +122,16 @@ public class AntiFireman implements Listener
 			plugin.getConfig().set ("nerf_fire.logstart.lava", logstart);
 			plugin.getConfig().set ("nerf_fire.logstart.player", logstart);
 			plugin.getConfig().set ("nerf_fire.logstart.lightning", logstart);					
+			plugin.getConfig().set ("nerf_fire.logstart.explosion", logstart);
+			plugin.getConfig().set ("nerf_fire.logstart.crystal", logstart);
 		} else { // new style
 			plugin.log.fine ("new style logstart found");
 
 			plugin.getConfig().getStringList ("nerf_fire.logstart.lava");
 			plugin.getConfig().getStringList ("nerf_fire.logstart.player");
 			plugin.getConfig().getStringList ("nerf_fire.logstart.lightning");
+			plugin.getConfig().getStringList ("nerf_fire.logstart.explosion");
+			plugin.getConfig().getStringList ("nerf_fire.logstart.crystal");
 		}
 
 		plugin.getConfig().getBoolean ("nerf_fire.nostartby.op", false);  // OPs can do by default
@@ -132,6 +144,7 @@ public class AntiFireman implements Listener
 		plugin.getConfig().getStringList ("nerf_fire.nodamageto.nonplayer.fromfire");
 
 		plugin.getConfig().getStringList ("nerf_fire.nospread"); // by adjacent fire
+		plugin.getConfig().getStringList ("nerf_fire.wooddropscharcoal"); 
 		
 		plugin.getConfig().getBoolean ("nerf_fire.whitelist", false);  // blacklist is default
 		
@@ -255,6 +268,8 @@ public class AntiFireman implements Listener
 	 * Begin Event Handlers
 	 */
 		
+	// Handle new (1.5.1) event.getIgnitingBlock() and event.getIgnitingEntity
+	// 1.5.1 also calls now for lightning, fireballs 
 	@EventHandler (ignoreCancelled = true)
 	public void onFireStart (BlockIgniteEvent event)
 	{	
@@ -310,8 +325,20 @@ public class AntiFireman implements Listener
 				loglevel = Level.FINER;
 				break;
 
+			case EXPLOSION:
+				plugin.log.finer ("Explosion starting fire at " + event.getBlock().getLocation());
+				disallow = ifConfigContains ("nerf_fire.nostartby.explosion", worldName);
+				shouldLog = ifConfigContains ("nerf_fire.logstart.explosion", worldName);
+				break;
+			
+			case ENDER_CRYSTAL:
+				plugin.log.fine ("Ender Crystal starting fire at " + event.getBlock().getLocation());
+				disallow = ifConfigContains ("nerf_fire.nostartby.crystal", worldName);
+				shouldLog = ifConfigContains ("nerf_fire.logstart.crystal", worldName);
+				break;			
+			
 			default:
-				plugin.log.warning ("Unknown fire ignition cause " + event.getCause());
+				plugin.log.warning ("Unknown fire ignition cause: " + event.getCause() + ". Time for a plugin update?");
 				// what about fire aspect weapons, and fireball explosions?
 				return;
 		}
@@ -324,7 +351,7 @@ public class AntiFireman implements Listener
 		else {  // check FireresistantList first
 			boolean whitelist = plugin.getConfig().getBoolean ("nerf_fire.whitelist");
 			Location loc = event.getBlock().getLocation();
-			Block block = (target != null ? target : getBurningBlockFrom(loc));
+			Block block = (target != null ? target : getBurningBlockFrom (loc));
 			if (block == null)
 				block = event.getBlock();
 
@@ -365,9 +392,13 @@ public class AntiFireman implements Listener
 				plugin.log.log (loglevel, "Allowing fire start by " + (p != null ? p.getDisplayName():event.getCause()) + " in " + worldName);
 		}
 	}		
-				
-	// Fire burns above, or if something is there, along the side of a block
-	// Can return an "incorrect" block if more than one block is adjacent to this airspace. 
+		
+	/****
+	 * getBurningBlockFrom(loc) returns, for a given AIR block about to be set afire, the block that is "burning"
+	 *   NOT the same as the block that lit this burning block, since fire can jump 3 blocks!
+	 * Fire burns above, or if something is there, along the side of a block
+	 * Can return an "incorrect" block if more than one block is adjacent to this airspace. 
+	 */
 	private Block getBurningBlockFrom (final Location loc) {
 		double x = loc.getX(), y = loc.getY(), z= loc.getZ();
 		
@@ -423,6 +454,30 @@ public class AntiFireman implements Listener
 		return null;
 	}
 	
+	// Always deletes supplied block. 
+	// If config is set, replaces LOGs with 0-3 charcoal.
+	// Chances of any drop: 50%. Chances of 1-3: even.
+	private void burnUpBlock (Block b) {
+		Material m = b.getType();
+		World w = b.getWorld();
+		String worldName = w.getName();
+
+		plugin.log.finer ("AF: burning up block of type " + m);
+
+		if (m == Material.LOG && ifConfigContains ("nerf_fire.wooddropscharcoal", worldName)) {
+			int amount = rng.nextInt(2) * (1+ rng.nextInt (3));
+			
+			if (amount > 0) {
+				MaterialData mat = new MaterialData (Material.COAL, CoalType.CHARCOAL.getData());
+				w.dropItem (b.getLocation(), mat.toItemStack (amount));
+				plugin.log.fine ("AF: dropping " + amount + " charcoal at " + b.getLocation());
+			}
+		}
+				
+		b.setType (Material.AIR);
+	}
+
+	
 	@EventHandler (ignoreCancelled = true)
 	public void onFireDestroyBlock (BlockBurnEvent event)
 	{
@@ -457,7 +512,7 @@ public class AntiFireman implements Listener
 			else  // have fire resistance, burning block is not resistant, but block underneath might be
 			{
 				// remove non-resistant block so following call doesn't return this one
-				event.getBlock().setType (Material.AIR);
+				burnUpBlock (block);
 				
 				// Check to see if we should allow spread of the displaced block
 				if ( ifConfigContains ("nerf_fire.nospread", worldName)) {
@@ -481,8 +536,12 @@ public class AntiFireman implements Listener
 		// else damage blocks, no fire resistance, but check for nospread
 		} else if ( ifConfigContains ("nerf_fire.nospread", worldName)) {
 			event.setCancelled (true); // prevent any spread by default NMS code
-			event.getBlock().setType (Material.AIR); // block damaged
+			burnUpBlock (event.getBlock());
+			return;
 		}	
+		
+		// Keep processing event, but check for drops
+		burnUpBlock (event.getBlock());
 	}	
 	
 	// Fire burns above, or if something is there, along the side of a block
@@ -599,37 +658,77 @@ public class AntiFireman implements Listener
 	}	
 	
 	// EntityblockEvent: Handles Lighting ignition source
+	// 1.5.1: Now Zombies can call this when lighting players on fire. Handle it??
 	@EventHandler (ignoreCancelled = true)
 	public void onEntityBurnEntity (EntityCombustByEntityEvent event)
 	{
-		Entity e = event.getEntity();
-		String worldName = e.getLocation().getWorld().getName();
+		Entity burned = event.getEntity();
+		String burnedName = (burned instanceof Player) ? ((Player)burned).getDisplayName() : burned.getType().toString();
+		String worldName = burned.getLocation().getWorld().getName();
 		Entity burner = event.getCombuster();
-		// The combuster can be a WeatherStorm a Blaze, or an Entity holding a FIRE_ASPECT enchanted item.
-				
-		plugin.log.fine ("Entity " + e.getType() + " combust by " + burner.getType()); // move after check below
-		if (burner.getType() != EntityType.LIGHTNING) {
-			plugin.log.finer ("Burn entity by non-lighting: " + burner.getType());
-			return; 			// Only looking for lightning
-		}
+		String burnerName = (burner instanceof Player) ? ((Player)burner).getDisplayName() : burner.getType().toString();
 		
-		if (e instanceof Player) {
-			Player p = (Player)e;
-			if (ifConfigContains ("nerf_fire.nodamageto.player.fromlightning", worldName) ) {
-				plugin.log.fine ("stopped combust to player " + p.getDisplayName() + " from lightning in " + worldName);
-				event.setDuration (0);
-				event.setCancelled (true);
-				return;
-			}
+		boolean stopEvent = false;
+		
+		// The combuster can be a WeatherStorm a Blaze, or an Entity holding a FIRE_ASPECT enchanted item.
+		// Called for fire-aspect by players/zoms on cows or mobs.
+		//  May need new Permission to allow Players to set Entities on fire
+				
+		plugin.log.fine ("Entity " + burned.getType() + " combust by " + burner.getType()); // move after check below
+		if (burner.getType() == EntityType.LIGHTNING) {			
+			if (burned instanceof Player) {
+				if (ifConfigContains ("nerf_fire.nodamageto.player.fromlightning", worldName) ) {
+					stopEvent = true;
+				}
 			
-		} else {
-			if (ifConfigContains ("nerf_fire.nodamageto.nonplayer.fromlightning", worldName) ) {
-				plugin.log.fine ("stopped combust to " + e.getType() + " from lightning in " + worldName);
-				event.setDuration (0);
-				event.setCancelled (true);
-				return;
-			}
+			} else {
+				if (ifConfigContains ("nerf_fire.nodamageto.nonplayer.fromlightning", worldName) ) {
+					stopEvent = true;
+				}
+			}	
 		}		
+		else 
+		{
+			if (burned.getType() == EntityType.PLAYER) 
+			{
+			//  Need to handle by checking nodamageto.nonplayer.fromfire and player.fromfire if entity is player
+			//  May need new Permission to allow Players to set Entities on fire
+				if (ifConfigContains ("nerf_fire.nodamageto.player.fromfire", worldName) ) {
+					stopEvent = true;
+				}
+			} 
+			
+			if (burner.getType() == EntityType.PLAYER) 
+			{
+				Player p = (Player)burner;
+				boolean disallow = false;
+				
+				// Add check if player can set fire to entities (mobs) by permission
+				disallow = ifConfigContains ("nerf_fire.noburnentityby.player", worldName);
+				// shouldLog = ifConfigContains ("nerf_fire.loglightentityby.player", worldName);
+ 
+				if (disallow) {
+					if (p.isOp() && !plugin.getConfig().getBoolean ("nerf_fire.noburnentityby.op", false)) {
+						disallow = false;
+					} else if (p.isPermissionSet ("antifire.burnentity") && p.hasPermission ("antifire.burnentity")) {
+						disallow = false;
+						plugin.log.fine (p.getDisplayName() + " has permission .burnentity. Overriding noburnentityby.player");
+					}
+				}
+				if (disallow)  {			
+					p.sendMessage (plugin.pluginName + " says you don't have permissions to burn entities");
+					stopEvent = disallow;
+				}
+				else if (ifConfigContains ("nerf_fire.nodamageto.nonplayer.fromfire", worldName) ) 
+					stopEvent = true;
+			}
+		}  			
+
+		if (stopEvent) {
+			event.setDuration (0);
+			event.setCancelled (true);
+			plugin.log.fine ("stopped combust to " + burnedName + " by " + burnerName);
+		}			
 	}	
 	
 	/* 
@@ -641,7 +740,7 @@ public class AntiFireman implements Listener
 	 *    cancel both events, and still get damage
 	 */
 	@EventHandler (ignoreCancelled = true)
-	public void  onFireDamageEntity (EntityDamageEvent event) {
+	public void onFireDamageEntity (EntityDamageEvent event) {
 		Entity damagee = event.getEntity();
 		String worldName = damagee.getLocation().getWorld().getName();
 		boolean makeLog = true;

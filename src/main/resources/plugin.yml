@@ -6,12 +6,13 @@
 # Dec 4  2012: Bumped version for bugfix
 # Dec 12 2012: added last option for extinguish
 # Feb 20 2013: added logstart, nostartby, nodamageto
+# May 03 2013; added burnentity perm
 
 name: AntiFire
 
 main: com.yahoo.phil_work.antifire.AntiFire
 
-version: 1.5
+version: 1.6.1
 
 author: Filbert66
 
@@ -56,6 +57,7 @@ permissions:
       antifire.teleport: true
       antifire.admin: true
       antifire.fireman: true
+      antifire.burnentity: true
   antifire.startfire:
     description: Allows user to start a fire. Can be overridden by fireproof blocklist
   antifire.logview:
@@ -69,4 +71,7 @@ permissions:
     default: op
   antifire.admin:
     description: Allows user to query & set configs & flush logs
+    default: op
+  antifire.burnentity:
+    desription: Allows user to set fire to mobs, players, with fire aspect weapons
     default: op

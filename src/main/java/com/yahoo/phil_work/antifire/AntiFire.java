@@ -11,6 +11,8 @@
  *  24 Nov 2012 : PSW : Added 'reload' command
  *  12 Dec 2012 : PSW : Added "last" option to "extinguish" command, and Player name.
  *  12 Jan 2013 : PSW : Add commands for logstart, nodamageto
+ *  09 Apr 2013 : PSW : Need to add commands for wooddropscharcoal, nerf_fire.nostartby.crystal, 
+ *   	logstart.crystal, logstart.explosion, noburnentityby.player
  */
  
  package com.yahoo.phil_work.antifire;
@@ -262,6 +264,7 @@ public class AntiFire extends JavaPlugin {
         log.info ("enabled, brought to you by Filbert66"); 
     }
 
+/**
     public String combineSplit(int startIndex, String[] string, String seperator) {
         StringBuilder builder = new StringBuilder();
 
@@ -272,6 +275,7 @@ public class AntiFire extends JavaPlugin {
         builder.deleteCharAt(builder.length() - seperator.length()); // remove
         return builder.toString();
     }
+**/
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String commandLabel, String[] args) {

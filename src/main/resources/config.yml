@@ -4,8 +4,10 @@ nerf_fire:
   logstart:
     player: world
     lightning: world
+    crystal: world
 #    lava: 
 #    fireball: 
+#    explosion: 
   whitelist: false
   nospread: world
   nostartby:
@@ -19,6 +21,7 @@ nerf_fire:
 #      - world
 #    explosion: world
 #    fireball: world
+#    crystal: world
   nodamageto:
 #    block: world
 #    player:
@@ -29,3 +32,4 @@ nerf_fire:
 #      fromlava: nether, world_the_end, world
 #      fromfire: world
   logflushsecs: 600
+  wooddropscharcoal: false
