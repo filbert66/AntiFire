@@ -1,5 +1,5 @@
 /* 
- * Fireman.java
+ * AntiFireman.java
  * 
  * History: 
  * 27 Mar 2012 : PSW: Created from scratch
@@ -19,6 +19,8 @@
  *					   Handle new ENDER_CRYSTAL and EXPLOSION causes.
  *                     nodamageto.player.fromfire now works when entities light players on fire
  *                     Add nerf_fire.noburnentityby.player, permission antifire.burnentity.
+ * 16 May 2013 : PSW : Split noburnentityby.player to noburnmobby.[player|mob], noburnplayerby.[player|mob]
+ *                     Fixed that mobs were alight for a tic even when noburnmobby.player
  */
 
  package com.yahoo.phil_work.antifire;
@@ -34,10 +36,6 @@ import java.util.logging.Level;
 import java.lang.Character;
 import java.util.NoSuchElementException;
  
-// import net.minecraft.server.WorldServer;
-// import net.minecraft.server.WorldManager;
-//import net.minecraft.server.MinecraftServer;
-
 import org.bukkit.event.entity.EntityCombustEvent; // when a player/entity is burnt by fire
 import org.bukkit.event.entity.EntityCombustByBlockEvent; // entity burnt by lava or burning block
 import org.bukkit.event.entity.EntityCombustByEntityEvent;// entity burnt by lightning, blaze, or FIRE_ASPECT weapon
@@ -45,6 +43,7 @@ import org.bukkit.event.block.BlockIgniteEvent; // when a block is lit
 import org.bukkit.event.block.BlockBurnEvent; // when a block is destroyed
 import org.bukkit.event.entity.EntityDamageByBlockEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.ExplosionPrimeEvent;
 import org.bukkit.event.EventPriority;
 
@@ -58,13 +57,12 @@ import org.bukkit.CoalType;
 import org.bukkit.Effect;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
+import org.bukkit.entity.Projectile;
 import org.bukkit.entity.Player;
-// import org.bukkit.entity.Entity;
-// import org.bukkit.entity.Fireball;
-// import org.bukkit.entity.TNTPrimed;
-//import org.bukkit.entity.HumanEntity;
+import org.bukkit.entity.HumanEntity;
 import org.bukkit.event.Listener;
 import org.bukkit.event.EventHandler;
+import org.bukkit.enchantments.Enchantment;
 
 import org.bukkit.command.CommandSender;
 import org.bukkit.ChatColor;
@@ -689,48 +687,70 @@ public class AntiFireman implements Listener
 		}		
 		else 
 		{
-			if (burned.getType() == EntityType.PLAYER) 
-			{
-			//  Need to handle by checking nodamageto.nonplayer.fromfire and player.fromfire if entity is player
-			//  May need new Permission to allow Players to set Entities on fire
-				if (ifConfigContains ("nerf_fire.nodamageto.player.fromfire", worldName) ) {
-					stopEvent = true;
-				}
-			} 
-			
-			if (burner.getType() == EntityType.PLAYER) 
-			{
-				Player p = (Player)burner;
-				boolean disallow = false;
-				
-				// Add check if player can set fire to entities (mobs) by permission
-				disallow = ifConfigContains ("nerf_fire.noburnentityby.player", worldName);
-				// shouldLog = ifConfigContains ("nerf_fire.loglightentityby.player", worldName);
- 
-				if (disallow) {
-					if (p.isOp() && !plugin.getConfig().getBoolean ("nerf_fire.noburnentityby.op", false)) {
-						disallow = false;
-					} else if (p.isPermissionSet ("antifire.burnentity") && p.hasPermission ("antifire.burnentity")) {
-						disallow = false;
-						plugin.log.fine (p.getDisplayName() + " has permission .burnentity. Overriding noburnentityby.player");
-					}
-				}
-				if (disallow)  {			
-					p.sendMessage (plugin.pluginName + " says you don't have permissions to burn entities");
-					stopEvent = disallow;
-				}
-				else if (ifConfigContains ("nerf_fire.nodamageto.nonplayer.fromfire", worldName) ) 
-					stopEvent = true;
-			}
+			stopEvent = ifNerfCombustion (burned, burner);
 		}  			
 
 		if (stopEvent) {
+			if (burned.getFireTicks() > 0) {
+				// There is a non-conditional call "setonfire(1)" in NMS.EntityHuman with a fire aspect weapon before this event
+				plugin.log.fine (burned.getType() + " was on fire; nerfed");
+				burned.setFireTicks(0); 
+			}
+
 			event.setDuration (0);
 			event.setCancelled (true);
 			plugin.log.fine ("stopped combust to " + burnedName + " by " + burnerName);
 		}			
 	}	
 	
+	/* 
+	 * Apparent sequence of events: 
+	 *    EntityDamageEvent (not yet on fire)
+	 *    EntityCombustEvent ()
+	 *    EntityDamageByBlockEvent (to Creeper by LAVA)- cancelled
+	 *    EntityCombustByBlockEvent (to Creeper by null) -- still called!
+	 *    cancel both events, and still get damage
+	 */
+	@EventHandler (ignoreCancelled = true)
+	public void onFireDamageEntity (EntityDamageByEntityEvent event) {
+		Entity damagee = event.getEntity();
+		Entity damager = event.getDamager();
+		boolean makeLog = true;
+		boolean nerfdamage = false;
+			
+		switch (event.getCause()) {
+			case FIRE:
+			case FIRE_TICK:
+				nerfdamage = ifNerfCombustion (damagee, damager);
+				break;
+
+			// might be player attacking with fire aspect weapon, which already set entity on fire
+			//  in which case we need to turn off fire but not the attack damage
+			// This avoids mobs dropping "cooked" items on death.
+			case ENTITY_ATTACK: 
+				if (damager instanceof HumanEntity && ((HumanEntity)damager).getItemInHand().containsEnchantment(Enchantment.FIRE_ASPECT)) {
+					if (ifNerfCombustion (damagee, damager) && damagee.getFireTicks() > 0) {
+						plugin.log.fine ("ENTITY_ATTACK: " + damagee.getType() + " was on fire; nerfed");
+						damagee.setFireTicks(0); 
+					}
+				}
+				break;			
+				
+			default:
+				nerfdamage = false;
+				break;
+		}
+		if (nerfdamage) {
+			if (damagee.getFireTicks() > 0) {
+				plugin.log.fine ("EntityDamageByEntityEvent: " + damagee.getType() + " was on fire; nerfed");
+				damagee.setFireTicks(0); 
+			}
+
+			event.setDamage (0); // just to make sure
+			event.setCancelled (true);
+		}
+	}
+		
 	/* 
 	 * Apparent sequence of events: 
 	 *    EntityDamageEvent (not yet on fire)
@@ -761,7 +781,7 @@ public class AntiFireman implements Listener
 					ifConfigContains ("nerf_fire.nodamageto.player.fromfire", worldName) :
 					ifConfigContains ("nerf_fire.nodamageto.nonplayer.fromfire", worldName) ;
 				break;
-				
+
 			default:
 				makeLog = false;
 				break;
@@ -797,5 +817,73 @@ public class AntiFireman implements Listener
 		//continue processing
 	}
 	
+	private boolean ifNerfCombustion (Entity burned, Entity burner) {
+		String worldName = burned.getLocation().getWorld().getName();
+
+		if (burner instanceof Projectile) {
+			Entity shooter = ((Projectile)burner).getShooter();
+			if (shooter != null) { // could be a Dispenser or such.
+				plugin.log.fine ("Determined " + shooter.getType() + " to have shot the " + burner.getType());
+				burner = shooter;
+			}
+		}
+			
+		if (burned.getType() == EntityType.PLAYER) 
+		{
+			boolean disallow = false;
+			
+			if (burner.getType() == EntityType.PLAYER)
+				disallow = ifConfigContains ("nerf_fire.noburnplayerby.player", worldName);
+			else 
+				disallow = ifConfigContains ("nerf_fire.noburnplayerby.mob", worldName);
+
+			if (disallow && burner.getType() == EntityType.PLAYER) {
+				Player p = (Player)burner;
+				if (p.isOp() && !plugin.getConfig().getBoolean ("nerf_fire.noburnplayerby.op", false)) {
+					disallow = false;
+				} else if (p.isPermissionSet ("antifire.burnplayer") && p.hasPermission ("antifire.burnplayer")) {
+					disallow = false;
+					plugin.log.fine (p.getDisplayName() + " has permission .burnplayer. Overriding noburnplayerby.player");
+				}
+				if (disallow) 
+					p.sendMessage (plugin.pluginName + " says you don't have permissions to burn players");
+			}
+			if (disallow)  {			
+				return true;
+			}
+			else if (ifConfigContains ("nerf_fire.nodamageto.player.fromfire", worldName) ) {
+				return true;
+			}
+		} 
+		
+		if (burner.getType() == EntityType.PLAYER) 
+		{
+			Player p = (Player)burner;
+			boolean disallow = false;
+			
+			// Because of earlier conditional, we know burned is NOT a player
+			disallow = ifConfigContains ("nerf_fire.noburnmobby.player", worldName);
+
+			if (disallow) {
+				if (p.isOp() && !plugin.getConfig().getBoolean ("nerf_fire.noburnmobby.op", false)) {
+					disallow = false;
+				} else if (p.isPermissionSet ("antifire.burnmob") && p.hasPermission ("antifire.burnmob")) {
+					disallow = false;
+					plugin.log.fine (p.getDisplayName() + " has permission .burnmob. Overriding noburnmobby.player");
+				}
+			}
+			if (disallow)  {			
+				p.sendMessage (plugin.pluginName + " says you don't have permissions to burn mobs");
+				return true;
+			}
+			else if (ifConfigContains ("nerf_fire.nodamageto.nonplayer.fromfire", worldName) ) 
+				return true;
+		}
+		else { // Burning mob by mob
+			if (ifConfigContains ("nerf_file.noburnmobby.mob", worldName))
+				return true;
+		}	
+		return false;	
+	}
 }
 

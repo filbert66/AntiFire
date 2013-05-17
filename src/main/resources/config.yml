@@ -1,4 +1,6 @@
 # 21 Aug 2012: Added logflushsecs
+# 1 May  2013: Added wooddropscharcoal
+# 16 May 2013: Added noburn(mob|player)by
 
 nerf_fire:
   logstart:
@@ -31,5 +33,13 @@ nerf_fire:
 #    nonplayer:
 #      fromlava: nether, world_the_end, world
 #      fromfire: world
+  noburnmobby:
+    op: false
+#    player: 
+#    mob: 
+  noburnplayerby:
+    op: false
+#    player: 
+#    mob: 
   logflushsecs: 600
-  wooddropscharcoal: false
+  wooddropscharcoal: world

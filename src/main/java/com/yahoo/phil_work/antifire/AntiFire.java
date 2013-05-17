@@ -11,8 +11,7 @@
  *  24 Nov 2012 : PSW : Added 'reload' command
  *  12 Dec 2012 : PSW : Added "last" option to "extinguish" command, and Player name.
  *  12 Jan 2013 : PSW : Add commands for logstart, nodamageto
- *  09 Apr 2013 : PSW : Need to add commands for wooddropscharcoal, nerf_fire.nostartby.crystal, 
- *   	logstart.crystal, logstart.explosion, noburnentityby.player
+ *  16 Apr 2013 : PSW : Added commands for charcoal, crystal, explosion, noburn(mob|player)by.* 
  */
  
  package com.yahoo.phil_work.antifire;
@@ -488,6 +487,41 @@ public class AntiFire extends JavaPlugin {
 			}
 			return true;									
 		}
+		else if (commandName.equals("charcoal")) {
+			if (args.length == 1) {
+				if ( !(sender instanceof Player)) // no params or can't impute world
+					sender.sendMessage ("Wood drops charcoal in: " + this.getConfig().getString("nerf_fire.wooddropscharcoal")); // do I need to check for list?
+				else {
+					String wName = ((Player)sender).getLocation().getWorld().getName();
+				
+					sender.sendMessage ("Wood drops charcoal is " + 
+										(antiFire.ifConfigContains ("nerf_fire.wooddropscharcoal", wName) ? ChatColor.RED + "ON " + ChatColor.RESET : 
+										 "off ") );
+				}
+			} else if ( !(sender instanceof Player)) {
+				sender.sendMessage (pdfFile.getName() + ": Cannot get current world of SERVER");
+			} else {
+				// have a parameter
+				Player p = (Player)sender;
+				boolean charcoalOn = args[1].toLowerCase().equals("on");
+				String wName = p.getLocation().getWorld().getName();
+
+				// Not working when config is a string. Need to 
+				List <String> noSpread = (this.getConfig().isString ("nerf_fire.wooddropscharcoal") ?
+											new ArrayList(Arrays.asList(getConfig().getString ("nerf_fire.wooddropscharcoal").split(","))) : 
+											getConfig().getStringList ("nerf_fire.wooddropscharcoal") );
+				// this.log.fine ("Current nospread=" + noSpread);
+				if ( !charcoalOn) { // turn on spread means remove nospread
+					noSpread.remove (wName);
+				}
+				else if (charcoalOn && !antiFire.ifConfigContains ("nerf_fire.wooddropscharcoal", wName))
+					noSpread.add (wName);
+				
+				this.getConfig().set ("nerf_fire.wooddropscharcoal", noSpread);
+				sender.sendMessage (ChatColor.BLUE + "Charcoal drops now On in: " + ChatColor.GRAY + noSpread);
+			}
+			return true;									
+		}
 		
 		else if (commandName.equals ("opstart")) {
 			boolean ifSet = this.getConfig().getBoolean ("nerf_fire.nostartby.op");
@@ -507,7 +541,8 @@ public class AntiFire extends JavaPlugin {
 		// All world lists params
 		else if ((commandName.indexOf ("nostart") != -1) || 
 				 (commandName.indexOf ("nodamage") != -1) ||
-				 commandName.equals ("logstart") )
+				 commandName.equals ("logstart") ||
+				 commandName.indexOf ("noburn") != -1)
 		{				 
 			String node;
 			Set<String> leafNames;
@@ -515,7 +550,7 @@ public class AntiFire extends JavaPlugin {
 			if (commandName.indexOf ("nostart") != -1) 			
 			{ 
 				node = "nostartby";
-				leafNames = new HashSet<String>(Arrays.asList("lava", "lightning", "fireball", "player", "explosion"));
+				leafNames = new HashSet<String>(Arrays.asList("lava", "lightning", "fireball", "player", "explosion", "crystal"));
 			}
 			else if (commandName.indexOf ("nodamage") != -1) {
 				node = "nodamageto";
@@ -523,11 +558,21 @@ public class AntiFire extends JavaPlugin {
 			}
 			else if (commandName.equals ("logstart")) {
 				node = commandName;
-				leafNames = new HashSet<String>(Arrays.asList("player", "lava", "lightning", "fireball"));
+				leafNames = new HashSet<String>(Arrays.asList("player", "lava", "lightning", "fireball", "crystal", "explosion"));
 			}
-			else {
-				return false;
+			else if (commandName.indexOf ("noburn") != -1) {
+				if (commandName.indexOf ("noburnmob") != -1)
+					node = "noburnmobby";
+				else if (commandName.indexOf ("noburnplayer") != -1)
+					node = "noburnplayerby";
+				else {
+					sender.sendMessage ("Unknown command '" + commandName + "'");
+					return false;
 				}
+				leafNames = new HashSet<String>(Arrays.asList ("player", "mob", "op"));
+			} else 
+				return false;
+				
 						
 			if (args.length == 1) {
 				if ( !(sender instanceof Player)) { // no params or can't impute world
@@ -541,6 +586,8 @@ public class AntiFire extends JavaPlugin {
 					for (String s : leafNames) {						
 						if (antiFire.ifConfigContains ("nerf_fire." + node + "." + s, wName))
 							activeTriggers += s + " ";
+						if (s.equals ("op") && this.getConfig().getBoolean ("nerf_fire." + node + ".op"))
+							activeTriggers += s + " ";
 					}
 					if (activeTriggers.length() == 0)
 						activeTriggers = "nothing";
@@ -553,14 +600,22 @@ public class AntiFire extends JavaPlugin {
 										ChatColor.YELLOW + activeTriggers);
 					else if (node.equals ("nodamageto"))
 						sender.sendMessage ("The following are safe from damage by fires in your world: " + 
-											ChatColor.YELLOW + activeTriggers);					
+											ChatColor.YELLOW + activeTriggers);			
+					else if (node.equals ("noburnmobby"))
+						sender.sendMessage ("Following cannot set mobs alight in your world: " + 
+											ChatColor.YELLOW + activeTriggers);
+					else if (node.equals ("noburnplayerby"))
+						sender.sendMessage ("Following cannot set players alight in your world: " + 
+											ChatColor.YELLOW + activeTriggers);						
 				}
 			} else {
 				// have a parameter
 				String wName;
+				String item = args[1].toLowerCase();
+
 				if ( !(sender instanceof Player)) {
-					if (args.length < 4) {
-						sender.sendMessage (pdfFile.getName() + ": Only support setting ALL from SERVER");
+					if (args.length < 4 && !item.equals ("op")) {
+						sender.sendMessage (pdfFile.getName() + ": Please provide 'true|false all'");
 						return false;
 					} else {
 						wName = "fooblitzki"; // nonsense for now
@@ -568,7 +623,6 @@ public class AntiFire extends JavaPlugin {
 				} else
 					 wName = ((Player)sender).getLocation().getWorld().getName();
 
-				String item = args[1].toLowerCase();
 				String logConfig;
 				boolean ActiveInWorld;
 				
@@ -578,12 +632,19 @@ public class AntiFire extends JavaPlugin {
 				}
 				else
 					logConfig = "nerf_fire." + node + "." + item;
-				ActiveInWorld = antiFire.ifConfigContains (logConfig, wName);
 
-				List <String> newLog = (this.getConfig().isString (logConfig) ?
-											new ArrayList(Arrays.asList(getConfig().getString (logConfig).split(","))) : 
-											getConfig().getStringList (logConfig) );
-				this.log.fine ("Current " + logConfig + "=" + newLog);
+				List <String> newLog = null;
+				
+				if (item.equals ("op"))
+					ActiveInWorld = this.getConfig().getBoolean (logConfig);
+				else {
+					ActiveInWorld = antiFire.ifConfigContains (logConfig, wName);
+
+					newLog = (this.getConfig().isString (logConfig) ?
+ 							new ArrayList(Arrays.asList(getConfig().getString (logConfig).split(","))) : 
+							getConfig().getStringList (logConfig) );
+					this.log.fine ("Current " + logConfig + "=" + newLog);
+				}
 				if (args.length == 2) { // no setting. Assume means turn on due to "nostart"
 					if (ActiveInWorld) {
 						if (node.equals ("nostartby"))	
@@ -592,12 +653,27 @@ public class AntiFire extends JavaPlugin {
 							sender.sendMessage ("Logging for " + item + " is already active for this world");
 						else if (node.equals ("nodamageto"))
 							sender.sendMessage (item + " is already safe from fire damage in this world");
+						else if (node.equals ("noburnmobby"))
+							sender.sendMessage (item + " is already disabled from lighting mobs in this world");
+						else if (node.equals ("noburnplayerby"))
+							sender.sendMessage (item + " is already disabled from lighting players in this world");
 						return true;
 					}
-					else 
+					else if (item.equals ("op")) {
+						this.getConfig().set (logConfig, true);
+						sender.sendMessage (ChatColor.BLUE + logConfig + ChatColor.DARK_BLUE + " now " + ChatColor.RED + "effective");
+						return true;
+					} else
 						newLog.add (wName);
+						
 				} else { // have a param				
 					boolean turnOn = args[2].toLowerCase().equals ("true");
+					
+					if (item.equals ("op")) {
+						this.getConfig().set (logConfig, turnOn);
+						sender.sendMessage (ChatColor.BLUE + logConfig + ChatColor.DARK_BLUE + " now " + (turnOn ? ChatColor.RED + "effective" : "off"));
+						return true;
+					}
 					
 					if (args.length == 3) {
 					  // only on/off param				
