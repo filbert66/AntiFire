@@ -12,6 +12,7 @@
  *  12 Dec 2012 : PSW : Added "last" option to "extinguish" command, and Player name.
  *  12 Jan 2013 : PSW : Add commands for logstart, nodamageto
  *  16 Apr 2013 : PSW : Added commands for charcoal, crystal, explosion, noburn(mob|player)by.* 
+ *  17 May 2013 : PSW : Added commands for charcoaldrop settings; can't set charcoaldrop.treetypedrop
  */
  
  package com.yahoo.phil_work.antifire;
@@ -498,10 +499,37 @@ public class AntiFire extends JavaPlugin {
 										(antiFire.ifConfigContains ("nerf_fire.wooddropscharcoal", wName) ? ChatColor.RED + "ON " + ChatColor.RESET : 
 										 "off ") );
 				}
-			} else if ( !(sender instanceof Player)) {
-				sender.sendMessage (pdfFile.getName() + ": Cannot get current world of SERVER");
 			} else {
 				// have a parameter
+				if (args[1].toLowerCase().equals("max")) {
+					if (args.length == 2) { // print only
+						sender.sendMessage ("Current charcoal drop is " + 
+											(this.getConfig().getBoolean ("nerf_fire.charcoaldrop.random") ? "random up to " : "a fixed ") + 
+											this.getConfig().getInt ("nerf_fire.charcoaldrop.max") );
+						return true;
+					} // else have anotehr param
+					
+					try { 
+						int max = Integer.parseInt(args[2]);
+						this.getConfig().set("nerf_fire.charcoaldrop.max", max);
+
+						sender.sendMessage ("Set " + ChatColor.BLUE + "nerf_fire.charcoaldrop.max" + ChatColor.RESET + " to " + max);
+						return true;
+					} catch (Exception exc) {
+						sender.sendMessage ("invalid value for charcoaldrop.max");
+						return false;
+					}	
+				} else if (args[1].toLowerCase().equals ("random") || args[1].toLowerCase().equals ("fixed")) {
+					boolean ifRandom = args[1].toLowerCase().equals("random");
+					this.getConfig().set("nerf_fire.charcoaldrop.random", ifRandom);
+
+					sender.sendMessage ("Set " + ChatColor.BLUE + "nerf_fire.charcoaldrop.random" + ChatColor.RESET + " to " + ifRandom);
+					return true;
+				} else if ( !(sender instanceof Player)) {
+					sender.sendMessage (pdfFile.getName() + ": Cannot get current world of SERVER");
+				}
+				// else interpret param as a boolean for whether to drop or not
+				
 				Player p = (Player)sender;
 				boolean charcoalOn = args[1].toLowerCase().equals("on");
 				String wName = p.getLocation().getWorld().getName();

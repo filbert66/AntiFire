@@ -21,6 +21,8 @@
  *                     Add nerf_fire.noburnentityby.player, permission antifire.burnentity.
  * 16 May 2013 : PSW : Split noburnentityby.player to noburnmobby.[player|mob], noburnplayerby.[player|mob]
  *                     Fixed that mobs were alight for a tic even when noburnmobby.player
+ * 13 Jun 2013 : PSW : Added charcoaldrop config node check to burnUpBlock();
+ *                     Fixed bug that was burning block (or making charcoal) even when "nerf_fire.nodamageto.block" set.
  */
 
  package com.yahoo.phil_work.antifire;
@@ -34,6 +36,7 @@ import java.util.LinkedList;
 //import java.util.regex.Pattern;
 import java.util.logging.Level;
 import java.lang.Character;
+import java.lang.Class;
 import java.util.NoSuchElementException;
  
 import org.bukkit.event.entity.EntityCombustEvent; // when a player/entity is burnt by fire
@@ -48,6 +51,8 @@ import org.bukkit.event.entity.ExplosionPrimeEvent;
 import org.bukkit.event.EventPriority;
 
 import org.bukkit.Material;
+import org.bukkit.TreeSpecies;
+import org.bukkit.material.Tree;
 import org.bukkit.Location;
 import org.bukkit.World;
 import	org.bukkit.block.Block;
@@ -455,6 +460,7 @@ public class AntiFireman implements Listener
 	// Always deletes supplied block. 
 	// If config is set, replaces LOGs with 0-3 charcoal.
 	// Chances of any drop: 50%. Chances of 1-3: even.
+	// Now maximum is driven by config, and if not configured to be random, drops the max. 
 	private void burnUpBlock (Block b) {
 		Material m = b.getType();
 		World w = b.getWorld();
@@ -463,7 +469,31 @@ public class AntiFireman implements Listener
 		plugin.log.finer ("AF: burning up block of type " + m);
 
 		if (m == Material.LOG && ifConfigContains ("nerf_fire.wooddropscharcoal", worldName)) {
-			int amount = rng.nextInt(2) * (1+ rng.nextInt (3));
+			int amount = 0;
+			int max = plugin.getConfig().getInt ("nerf_fire.charcoaldrop.max");
+			
+		   // Allow max configurable by wood type
+			if (plugin.getConfig().isSet ("nerf_fire.charcoaldrop.treetypemax")) {
+				// plugin.log.finer ("Found new treetypemax");
+				
+				Tree t = new Tree (m,b.getData());
+				TreeSpecies treeType = t.getSpecies();
+				// plugin.log.finer ("detected LOG of type " + treeType + " data: " + treeType.getData());
+				List <Short> treeTypeMax = plugin.getConfig().getShortList ("nerf_fire.charcoaldrop.treetypemax");
+
+				if (treeTypeMax.size() > treeType.getData()) {
+					max = treeTypeMax.get(treeType.getData());
+					// plugin.log.finer ("Reset max charcoal for type " + treeType + " to " + max);
+				}
+				else
+					plugin.log.warning ("charcoaldrop.treetypemax needs 4 values; using charcoaldrop.max");
+			}
+
+			if (max > 0 && plugin.getConfig().getBoolean ("nerf_fire.charcoaldrop.random")) {				
+				// 50% chance of dropping something, equally divided from (1 to max)
+				amount = rng.nextInt(2) * (1+ rng.nextInt (max));
+			} else 
+				amount = max;
 			
 			if (amount > 0) {
 				MaterialData mat = new MaterialData (Material.COAL, CoalType.CHARCOAL.getData());
@@ -485,6 +515,7 @@ public class AntiFireman implements Listener
 		if (ifConfigContains ("nerf_fire.nodamageto.block", worldName)) {
 			plugin.log.finer ("stopped block (" + event.getBlock().getType() + ") destruction by fire in " + worldName);
 			event.setCancelled (true);
+			return; // don't check for spread
 			// will this put the fire out, or will it burn indefinitely like netherack?
 			// Burns indefinitely.
 		}
@@ -506,6 +537,7 @@ public class AntiFireman implements Listener
 					plugin.log.finer ("stopped fire on resistant block type at " + fireLoc.getLocation());
 					fireLoc.setType (Material.AIR);
 				}	
+				return; // don't allow spread on fire resistance
 			}	
 			else  // have fire resistance, burning block is not resistant, but block underneath might be
 			{
@@ -538,7 +570,7 @@ public class AntiFireman implements Listener
 			return;
 		}	
 		
-		// Keep processing event, but check for drops
+		// Keep processing event, which allows for spread, but check for drops
 		burnUpBlock (event.getBlock());
 	}	
 	
