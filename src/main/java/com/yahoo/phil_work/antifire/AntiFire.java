@@ -13,6 +13,8 @@
  *  12 Jan 2013 : PSW : Add commands for logstart, nodamageto
  *  16 Apr 2013 : PSW : Added commands for charcoal, crystal, explosion, noburn(mob|player)by.* 
  *  17 May 2013 : PSW : Added commands for charcoaldrop settings; can't set charcoaldrop.treetypedrop
+ *  12 Sep 2013 : PSW : Updated per latest Metrics API.
+ *  23 Sep 2013 : PSW : Added commands for lava placement config
  */
  
  package com.yahoo.phil_work.antifire;
@@ -143,7 +145,9 @@ public class AntiFire extends JavaPlugin {
     }
 
     public static boolean validName(String name) {
-        return name.length() > 2 && name.length() < 17 && !name.matches("(?i).*[^a-z0-9_].*");
+        return name.length() > 2 && 
+        	  (name.length() < 17 || (name.indexOf("_placed_lava") != -1 && name.length() < 29)) && 
+        	  !name.matches("(?i).*[^a-z0-9_].*");
     }
 
     public void onEnable() {
@@ -212,7 +216,8 @@ public class AntiFire extends JavaPlugin {
 					}
 			});
 
-			metrics.addCustomData(new Metrics.Plotter("Total Log Queries") {
+			Metrics.Graph graph1 = metrics.createGraph("AF Data");
+			graph1.addPlotter(new Metrics.Plotter("Total Log Queries") {
 		
 				@Override
 				public int getValue() {
@@ -221,38 +226,41 @@ public class AntiFire extends JavaPlugin {
 		
 			});
 
-			metrics.addCustomData(new Metrics.Plotter("Total Teleports to Firestarts") {
+			graph1.addPlotter(new Metrics.Plotter("Total Teleports to Firestarts") {
 		
 				@Override
 				public int getValue() {
 					return teleports;
 				}
-		
 			});
 
-			metrics.addCustomData(new Metrics.Plotter("Log Entries") {
+			graph1.addPlotter(new Metrics.Plotter("Log Entries") {
 		
 				@Override
 				public int getValue() {
 					return antiFire.logEntries;
 				}
-		
 			});
-			metrics.addCustomData(new Metrics.Plotter("Fireproofed starts") {
+			graph1.addPlotter(new Metrics.Plotter("Fireproofed starts") {
 		
 				@Override
 				public int getValue() {
 					return antiFire.fireProofed;
 				}
-		
 			});
-			metrics.addCustomData(new Metrics.Plotter("Nerfed starts") {
+			graph1.addPlotter(new Metrics.Plotter("Nerfed starts") {
 		
 				@Override
 				public int getValue() {
 					return antiFire.nerfedStart;
 				}
+			});
+			graph1.addPlotter(new Metrics.Plotter("Nerfed lava") {
 		
+				@Override
+				public int getValue() {
+					return antiFire.nerfedLava;
+				}
 			});
 
 			metrics.start();
@@ -331,8 +339,16 @@ public class AntiFire extends JavaPlugin {
 			if ( !validName (p)) {
 				sender.sendMessage(ChatColor.RED + "bad player name '" + p + "'");
                 return true;
-            } else if ( !sender.getServer().getOfflinePlayer(p).hasPlayedBefore()) {
-				sender.sendMessage ("'" + p + "' has never played before");
+            } 
+
+			// Allow for lava suffix in player name
+			String pruned = p;
+            int start_placed = p.indexOf ("_placed_lava");
+            if (start_placed != -1)
+            	pruned = p.substring (0, start_placed);
+				
+            if ( !sender.getServer().getOfflinePlayer(pruned).hasPlayedBefore()) {
+				sender.sendMessage ("'" + pruned + "' has never played before");
 				return true;
 			}
 			boolean empty = true;
@@ -565,11 +581,25 @@ public class AntiFire extends JavaPlugin {
 								" now " + ChatColor.GRAY + !turnOn);
 			return true;
 		}				
+		else if (commandName.equals ("opplace")) {
+			boolean ifSet = this.getConfig().getBoolean ("nerf_fire.noplacelavaby.op");
+			
+			if (args.length == 1) {
+				sender.sendMessage ("OPs are " + (ifSet ? ChatColor.RED + "NOT " + ChatColor.RESET : "") + "allowed to place lava");
+				return true;
+			}
+			// else have a param
+			boolean turnOn = args[1].toLowerCase().equals ("true");
+			this.getConfig().set ("nerf_fire.noplacelavaby.op", !turnOn);
+			sender.sendMessage (ChatColor.BLUE + "nerf_fire.noplacelavaby.op" + ChatColor.DARK_BLUE + 
+								" now " + ChatColor.GRAY + !turnOn);
+			return true;
+		}				
 
 		// All world lists params
-		else if ((commandName.indexOf ("nostart") != -1) || 
+		else if ((commandName.indexOf ("nostart") != -1) || (commandName.indexOf ("noplace") != -1) ||
 				 (commandName.indexOf ("nodamage") != -1) ||
-				 commandName.equals ("logstart") ||
+				 commandName.equals ("logstart") || commandName.equals ("logplace") ||
 				 commandName.indexOf ("noburn") != -1)
 		{				 
 			String node;
@@ -584,9 +614,17 @@ public class AntiFire extends JavaPlugin {
 				node = "nodamageto";
 				leafNames = new HashSet<String>(Arrays.asList("block", "player.fromlava", "player.fromfire", "nonplayer.fromlava", "nonplayer.fromfire"));
 			}
+			else if (commandName.indexOf ("noplace") != -1) {
+				node = "noplacelavaby";
+				leafNames = new HashSet<String>(Arrays.asList("player", "op"));
+			}
 			else if (commandName.equals ("logstart")) {
 				node = commandName;
 				leafNames = new HashSet<String>(Arrays.asList("player", "lava", "lightning", "fireball", "crystal", "explosion"));
+			}
+			else if (commandName.equals ("logplace")) {
+				node = commandName;
+				leafNames = new HashSet<String>(Arrays.asList("lava"));
 			}
 			else if (commandName.indexOf ("noburn") != -1) {
 				if (commandName.indexOf ("noburnmob") != -1)
@@ -623,8 +661,14 @@ public class AntiFire extends JavaPlugin {
 					if (node.equals ("nostartby"))	
 						sender.sendMessage ("The following are UNable to start fires in your world: " + 
 											ChatColor.YELLOW + activeTriggers);
+					else if (node.equals ("noplacelavaby"))	
+						sender.sendMessage ("The following are UNable to place lava in your world: " + 
+											ChatColor.YELLOW + activeTriggers);
 					else if (node.equals ("logstart"))
 						sender.sendMessage ("Logging in your world is active for starts by: " + 
+										ChatColor.YELLOW + activeTriggers);
+					else if (node.equals ("logplace"))
+						sender.sendMessage ("Logging in your world is active for placement of: " + 
 										ChatColor.YELLOW + activeTriggers);
 					else if (node.equals ("nodamageto"))
 						sender.sendMessage ("The following are safe from damage by fires in your world: " + 
@@ -677,7 +721,11 @@ public class AntiFire extends JavaPlugin {
 					if (ActiveInWorld) {
 						if (node.equals ("nostartby"))	
 							sender.sendMessage (item + " is already disabled from starting fires for this world");
+						else if (node.equals ("noplacelavaby"))	
+							sender.sendMessage (item + " is already disabled from placing lava for this world");
 						else if (node.equals ("logstart"))
+							sender.sendMessage ("Logging for " + item + " is already active for this world");
+						else if (node.equals ("logplace"))
 							sender.sendMessage ("Logging for " + item + " is already active for this world");
 						else if (node.equals ("nodamageto"))
 							sender.sendMessage (item + " is already safe from fire damage in this world");

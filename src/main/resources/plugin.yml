@@ -8,12 +8,13 @@
 # Feb 20 2013: added logstart, nostartby, nodamageto
 # May 03 2013; added burnentity perm
 # May 15 2013: added burnmob, burnplayer permissions
+# Sep 22 2013: added lava permissions
 
 name: AntiFire
 
 main: com.yahoo.phil_work.antifire.AntiFire
 
-version: 1.7
+version: 1.8
 
 author: Filbert66
 
@@ -59,6 +60,7 @@ permissions:
       antifire.fireman: true
       antifire.burnmob: true
       antifire.burnplayer: true
+      antifire.placelava: true
   antifire.burnentity:
     description: allows setting fire to any entity
     children:
@@ -83,4 +85,7 @@ permissions:
     default: op
   antifire.burnplayer:
     description: Allows user to set fire to players with fire aspect weapons. Overrides noburnplayerby.player.
+    default: op
+  antifire.placelava:
+    description: Allows user to place lava. Lava fires can be nerfed elsewhere
     default: op

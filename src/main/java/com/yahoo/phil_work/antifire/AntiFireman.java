@@ -23,6 +23,7 @@
  *                     Fixed that mobs were alight for a tic even when noburnmobby.player
  * 13 Jun 2013 : PSW : Added charcoaldrop config node check to burnUpBlock();
  *                     Fixed bug that was burning block (or making charcoal) even when "nerf_fire.nodamageto.block" set.
+ * 22 Sep 2013 : PSW : Added lava place functionality in BucketEmpty. 
  */
 
  package com.yahoo.phil_work.antifire;
@@ -49,6 +50,7 @@ import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.ExplosionPrimeEvent;
 import org.bukkit.event.EventPriority;
+import org.bukkit.event.player.PlayerBucketEmptyEvent;
 
 import org.bukkit.Material;
 import org.bukkit.TreeSpecies;
@@ -71,7 +73,7 @@ import org.bukkit.enchantments.Enchantment;
 
 import org.bukkit.command.CommandSender;
 import org.bukkit.ChatColor;
-
+import org.bukkit.permissions.PermissionAttachmentInfo;
 
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.Bukkit;
@@ -88,7 +90,7 @@ public class AntiFireman implements Listener
 	private static final Random rng = new Random();
 	
 	// Metrics
-	public int logEntries = 0, fireProofed = 0, nerfedStart=0;
+	public int logEntries = 0, fireProofed = 0, nerfedStart=0, nerfedLava = 0;
 	
 	
 	public AntiFireman (AntiFire instance)
@@ -847,6 +849,57 @@ public class AntiFireman implements Listener
 			plugin.log.fine ("set " + event.getEntityType() + " explosion to NOT cause fire");
 		}
 		//continue processing
+	}
+	
+	@EventHandler (ignoreCancelled = true)
+	public void onBucketEmpty (PlayerBucketEmptyEvent event)
+	{
+		Player p = event.getPlayer();
+		Material contents = event.getBucket();
+		boolean disallow = false;
+		boolean shouldLog = false;
+		Location loc = p.getLocation();
+		String worldName = loc.getWorld().getName();
+		
+		if (contents == Material.LAVA_BUCKET) {
+			disallow = ifConfigContains ("nerf_fire.noplacelavaby.player", worldName);		
+			shouldLog = ifConfigContains ("nerf_fire.logplace.lava", worldName);
+			
+			if (disallow) {
+				if (p.isOp() && !plugin.getConfig().getBoolean ("nerf_fire.noplacelavaby.op", false)) {
+					disallow = false;
+				} else if (p.isPermissionSet ("antifire.placelava") && p.hasPermission ("antifire.placelava")) {
+					disallow = false;
+					plugin.log.fine (p.getDisplayName() + " has permission .placelava. Overriding config noplacelavaby.player");
+					
+					/***
+					for (PermissionAttachmentInfo i : p.getEffectivePermissions())
+						if (i.getPermission().indexOf ("antifire") != -1)
+							plugin.log.finer (p.getDisplayName() + " has permission " + i.getPermission() + " = " + i.getValue());
+					***/
+				}
+			}
+			if (disallow) {
+				p.sendMessage (plugin.pluginName + " says you don't have lava place permissions");
+				plugin.log.info ("Blocked lava place by " + p.getDisplayName());
+				event.setCancelled (true);
+				this.nerfedLava++;
+			}
+			else if (shouldLog) {
+				String logEvent = p.getDisplayName() + "_placed_lava";
+				if (plugin.fireLog.add (logEvent, loc) > 10) // don't flush to disk until we get 10 events
+				{
+					plugin.flushLog (null, plugin.getConfig().getInt ("nerf_fire.logflushsecs"));
+				}
+				plugin.log.info (plugin.fireLog.list.getLast().toStringNoDate(false));  // logger already includes date
+				logEntries++;
+			}
+			else
+				 plugin.log.info ("Allowing lava place by " + p.getDisplayName() + " in " + worldName);
+		}
+		else
+			plugin.log.fine ("Placing non-lava bucket of " + contents);
+		
 	}
 	
 	private boolean ifNerfCombustion (Entity burned, Entity burner) {
