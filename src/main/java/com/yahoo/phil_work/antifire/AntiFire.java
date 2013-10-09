@@ -421,6 +421,18 @@ public class AntiFire extends JavaPlugin {
         if (commandName.equals("print")) {
             return antiFire.printConfig (sender);
 		}
+		// For analyzing timed block design
+		else if (commandName.equals ("time")) {
+			if ( !(sender instanceof Player) || args.length > 1) { // any arg prints full list
+				for (World w : this.getServer().getWorlds()) {
+					sender.sendMessage (w.getName() + " time: " + w.getTime() + ", full: " + w.getFullTime());					
+				}
+			} else {
+				World w = ((Player)sender).getLocation().getWorld();
+				sender.sendMessage (w.getName() + " time: " + w.getTime() + ", full: " + w.getFullTime());					
+			}
+			return true;
+		}	
 		else if (commandName.equals("fireproof") || commandName.equals ("burnable")) {
 			boolean whitelist = this.getConfig().getBoolean ("nerf_fire.whitelist");
 			if (args.length == 1) { // no changes, just print

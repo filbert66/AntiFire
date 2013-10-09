@@ -24,6 +24,7 @@
  * 13 Jun 2013 : PSW : Added charcoaldrop config node check to burnUpBlock();
  *                     Fixed bug that was burning block (or making charcoal) even when "nerf_fire.nodamageto.block" set.
  * 22 Sep 2013 : PSW : Added lava place functionality in BucketEmpty. 
+ * 25 Sep 2013 : PSW : Adding Timed-based functions.
  */
 
  package com.yahoo.phil_work.antifire;
@@ -57,8 +58,8 @@ import org.bukkit.TreeSpecies;
 import org.bukkit.material.Tree;
 import org.bukkit.Location;
 import org.bukkit.World;
-import	org.bukkit.block.Block;
-import	org.bukkit.block.BlockState;
+import org.bukkit.block.Block;
+import org.bukkit.block.BlockState;
 import org.bukkit.material.MaterialData;
 import org.bukkit.CoalType;
 import org.bukkit.Effect;
@@ -82,12 +83,15 @@ import com.yahoo.phil_work.BlockId;
 import com.yahoo.phil_work.BlockIdList;
 import com.yahoo.phil_work.antifire.FireLogEntry;
 import com.yahoo.phil_work.antifire.AntifireLog;
+import com.yahoo.phil_work.antifire.IgniteCause;
+import com.yahoo.phil_work.antifire.TimedManager;
 
 public class AntiFireman implements Listener
 {
 	private final AntiFire plugin;
 	public	BlockIdList FireResistantList;
 	private static final Random rng = new Random();
+	private TimedManager timedMgr = null;
 	
 	// Metrics
 	public int logEntries = 0, fireProofed = 0, nerfedStart=0, nerfedLava = 0;
@@ -102,8 +106,6 @@ public class AntiFireman implements Listener
 	{
 		boolean writeDefault = false;
 		
-		// customConfigurationFile = new File(getDataFolder(), "users.yml");
-
 		if ( !plugin.getDataFolder().exists()) {
 			writeDefault = true;
 			plugin.getConfig().options().copyDefaults(true);
@@ -157,6 +159,16 @@ public class AntiFireman implements Listener
 
 		FireResistantList = new BlockIdList (this.plugin);
 		FireResistantList.loadBlockList ("nerf_fire.blocklist");
+		
+		// if config has timed set TODO
+		if (true) { // only incur overhead if this config turns it on
+			if (timedMgr == null) {
+				plugin.log.info ("Starting timed fire manager");
+				timedMgr = new TimedManager (this.plugin);
+			}
+			timedMgr.initConfig();
+			plugin.getServer().getPluginManager().registerEvents (timedMgr, plugin);
+		}
 		
 		if (writeDefault)
 			plugin.saveDefaultConfig();
@@ -281,6 +293,7 @@ public class AntiFireman implements Listener
 		Player p = event.getPlayer();
 		String worldName = event.getBlock().getWorld().getName();
 		Block target = null;
+		IgniteCause detailedCause = IgniteCause.UNKNOWN;
 		
 		boolean disallow = false;
 		boolean shouldLog = false;
@@ -290,9 +303,12 @@ public class AntiFireman implements Listener
 			case LAVA:
 				disallow = ifConfigContains ("nerf_fire.nostartby.lava", worldName);
 				shouldLog = ifConfigContains ("nerf_fire.logstart.lava", worldName);
+				detailedCause = IgniteCause.LAVA;
 				break;
 				
 			case FIREBALL: 
+				detailedCause = IgniteCause.getIgniteCause (event.getIgnitingEntity().getType());
+				
 				if (p == null) {  // docs say only by player, but can happen with plugins starting them
 					disallow = ifConfigContains ("nerf_fire.nostartby.fireball", worldName);
 					shouldLog = ifConfigContains ("nerf_fire.logstart.fireball", worldName);
@@ -301,6 +317,7 @@ public class AntiFireman implements Listener
 			case FLINT_AND_STEEL:
 				disallow = ifConfigContains ("nerf_fire.nostartby.player", worldName);
 				shouldLog = ifConfigContains ("nerf_fire.logstart.player", worldName);
+				detailedCause = IgniteCause.FLINT_AND_STEEL;
 
 				if (disallow) {
 					if (p.isOp() && !plugin.getConfig().getBoolean ("nerf_fire.nostartby.op", false)) {
@@ -322,29 +339,34 @@ public class AntiFireman implements Listener
 				plugin.log.fine ("Lightning strike starting fire at " + event.getBlock().getLocation());
 				disallow = ifConfigContains ("nerf_fire.nostartby.lightning", worldName);
 				shouldLog = ifConfigContains ("nerf_fire.logstart.lightning", worldName);
+				detailedCause = IgniteCause.LIGHTNING;
 				break;
 				
 			case SPREAD:
 				disallow = ifConfigContains ("nerf_fire.nospread", worldName);
 				// shouldLog = ifConfigContains ("nerf_fire.logstart.spread", worldName);
 				loglevel = Level.FINER;
+				detailedCause = IgniteCause.SPREAD;
 				break;
 
 			case EXPLOSION:
 				plugin.log.finer ("Explosion starting fire at " + event.getBlock().getLocation());
 				disallow = ifConfigContains ("nerf_fire.nostartby.explosion", worldName);
 				shouldLog = ifConfigContains ("nerf_fire.logstart.explosion", worldName);
+				detailedCause = IgniteCause.getIgniteCause (event.getIgnitingEntity().getType());
 				break;
 			
 			case ENDER_CRYSTAL:
 				plugin.log.fine ("Ender Crystal starting fire at " + event.getBlock().getLocation());
 				disallow = ifConfigContains ("nerf_fire.nostartby.crystal", worldName);
 				shouldLog = ifConfigContains ("nerf_fire.logstart.crystal", worldName);
+				detailedCause = IgniteCause.ENDER_CRYSTAL;
 				break;			
 			
 			default:
 				plugin.log.warning ("Unknown fire ignition cause: " + event.getCause() + ". Time for a plugin update?");
 				// what about fire aspect weapons, and fireball explosions?
+				detailedCause = IgniteCause.UNKNOWN;
 				return;
 		}
 
@@ -379,6 +401,9 @@ public class AntiFireman implements Listener
 					plugin.log.finer (block.getType() + (whitelist ? "": " not") + " in nerf_fire.blocklist");
 				}
 
+			// Call TimedBlock here.
+			if (timedMgr.ifTimedDelayFor (detailedCause) && !burnsForever (block)) 
+				timedMgr.setTimedDelay (detailedCause, event.getBlock().getState());
 			
 			if (shouldLog)
 			{
@@ -397,6 +422,13 @@ public class AntiFireman implements Listener
 				plugin.log.log (loglevel, "Allowing fire start by " + (p != null ? p.getDisplayName():event.getCause()) + " in " + worldName);
 		}
 	}		
+
+	boolean burnsForever (final Block b) {
+		Material m = b.getType();
+		return (m == Material.NETHERRACK) || 
+				(m == Material.BEDROCK && b.getWorld().getEnvironment() == World.Environment.THE_END);
+	}
+
 		
 	/****
 	 * getBurningBlockFrom(loc) returns, for a given AIR block about to be set afire, the block that is "burning"
@@ -408,6 +440,10 @@ public class AntiFireman implements Listener
 		double x = loc.getX(), y = loc.getY(), z= loc.getZ();
 		
 		Location test = new Location (loc.getWorld(), x, y, z);
+		
+		// TODO: REPLACE CHECK WITH m.isFlammable()
+		// No, because players can purposefully light fire to inFlammable objects. 
+		// isFlammable is only used during fire spread.
 		
 		Block b = test.getBlock ();
 		Material m = b.getType();
@@ -520,6 +556,11 @@ public class AntiFireman implements Listener
 			return; // don't check for spread
 			// will this put the fire out, or will it burn indefinitely like netherack?
 			// Burns indefinitely.
+		}
+		else if (timedMgr.isBeingTimed (getFireBlockFrom (event.getBlock().getLocation()))) {
+			plugin.log.finer ("stopped timed fire block destruction at (" + event.getBlock().getLocation());
+			event.setCancelled (true);
+			return; // don't check for spread
 		}
 		else if ( !FireResistantList.isEmpty()) {
 			boolean whitelist = plugin.getConfig().getBoolean ("nerf_fire.whitelist");
