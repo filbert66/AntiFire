@@ -24,7 +24,7 @@
  * 13 Jun 2013 : PSW : Added charcoaldrop config node check to burnUpBlock();
  *                     Fixed bug that was burning block (or making charcoal) even when "nerf_fire.nodamageto.block" set.
  * 22 Sep 2013 : PSW : Added lava place functionality in BucketEmpty. 
- * 25 Sep 2013 : PSW : Adding Timed-based functions.
+ * 25 Sep 2013 : PSW : Adding Timed-based functions and config.
  */
 
  package com.yahoo.phil_work.antifire;
@@ -91,7 +91,7 @@ public class AntiFireman implements Listener
 	private final AntiFire plugin;
 	public	BlockIdList FireResistantList;
 	private static final Random rng = new Random();
-	private TimedManager timedMgr = null;
+	public TimedManager timedMgr = null;
 	
 	// Metrics
 	public int logEntries = 0, fireProofed = 0, nerfedStart=0, nerfedLava = 0;
@@ -160,15 +160,17 @@ public class AntiFireman implements Listener
 		FireResistantList = new BlockIdList (this.plugin);
 		FireResistantList.loadBlockList ("nerf_fire.blocklist");
 		
-		// if config has timed set TODO
-		if (true) { // only incur overhead if this config turns it on
+		// if config has timed set 
+		if (plugin.getConfig().isConfigurationSection ("nerf_fire.timedcauses")) { // only incur overhead if this config turns it on
 			if (timedMgr == null) {
 				plugin.log.info ("Starting timed fire manager");
 				timedMgr = new TimedManager (this.plugin);
+				
+				plugin.getServer().getPluginManager().registerEvents (timedMgr, plugin);
 			}
 			timedMgr.initConfig();
-			plugin.getServer().getPluginManager().registerEvents (timedMgr, plugin);
-		}
+		} else
+			plugin.log.config ("no timed causes configured for fire length; disabling timer task");
 		
 		if (writeDefault)
 			plugin.saveDefaultConfig();

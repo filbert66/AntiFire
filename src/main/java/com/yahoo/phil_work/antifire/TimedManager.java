@@ -4,15 +4,16 @@ import java.util.HashMap;
 import java.util.Map;
 import java.lang.IllegalArgumentException;
 
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.World;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.event.block.BlockFadeEvent;
+import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
-import org.bukkit.event.EventHandler;
 
 import com.yahoo.phil_work.antifire.TimedExtinguisher;
 import com.yahoo.phil_work.antifire.IgniteCause;
@@ -34,15 +35,34 @@ class TimedManager implements Listener {
 	}
 
 	public void initConfig() {
-		// TODO actually read configuration data.
-		TimedCause.put (IgniteCause.FIRECHARGE, 10000L); // hard-code 10 second delay
-		// TimedCause.put (IgniteCause.FLINT_AND_STEEL, 30000L); // to test fading
+		ConfigurationSection conf = plugin.getConfig().getConfigurationSection ("nerf_fire.timedcauses");
+		if (conf == null) {
+			return;
+		}	
+		for (String k : conf.getKeys (false)) {
+			long del = conf.getLong (k);
+			TimedFireCauses tc = new TimedFireCauses (k, del);
+			if (tc.Cause == null) 
+				plugin.getLogger().warning ("Unrecognized ignite cause: '" + k + "'. Refer to http://bit.ly/1gsdblo");
+			else {
+				TimedCause.put (tc.Cause, tc.BurnMillisecs);
+			
+				plugin.getLogger().config ("Added timed fire of delay " + del + " for " + tc.Cause);
+			}
+		}
 	}		
 
 	// Class for parsing configuration strings
 	class TimedFireCauses {	
+		TimedFireCauses (IgniteCause c, long d) {
+			Cause = c;
+			BurnMillisecs = d;
+		}
+		TimedFireCauses (String c, long d) {
+			this (IgniteCause.matchIgniteCause(c), d);
+		}
 		TimedFireCauses (String cuz, String del) {
-			Cause = IgniteCause.matchIgniteCause(cuz);
+			this (cuz, 0);
 			try {
 				BurnMillisecs = Long.parseLong (del);
 			} catch (NumberFormatException ex) {}
@@ -63,8 +83,8 @@ class TimedManager implements Listener {
 	}
 	
 	public void setTimedDelay (IgniteCause cause, BlockState state) {
-		long fireDelay = TimedCause.get (cause); // in millisecs
 		if (ifTimedDelayFor (cause)) {
+			long fireDelay = TimedCause.get (cause); // in millisecs
 			fireDelay = fireDelay * 20L / 1000L;
 			this.add (state, fireDelay); // 20 ticks per 1000ms
 		}
