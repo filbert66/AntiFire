@@ -25,14 +25,15 @@
  *                     Fixed bug that was burning block (or making charcoal) even when "nerf_fire.nodamageto.block" set.
  * 22 Sep 2013 : PSW : Added lava place functionality in BucketEmpty. 
  * 25 Sep 2013 : PSW : Adding Timed-based functions and config.
+ * 10 Oct 2013 : PSW : Support command to modify TimedMgr configuration.
  */
 
  package com.yahoo.phil_work.antifire;
 
  
- import java.util.List;
- import java.util.Random;
- import java.util.logging.Logger;
+import java.util.List;
+import java.util.Random;
+import java.util.logging.Logger;
 import java.util.Collection;
 import java.util.LinkedList;
 //import java.util.regex.Pattern;
@@ -91,7 +92,7 @@ public class AntiFireman implements Listener
 	private final AntiFire plugin;
 	public	BlockIdList FireResistantList;
 	private static final Random rng = new Random();
-	public TimedManager timedMgr = null;
+	private TimedManager timedMgr = null;
 	
 	// Metrics
 	public int logEntries = 0, fireProofed = 0, nerfedStart=0, nerfedLava = 0;
@@ -163,10 +164,7 @@ public class AntiFireman implements Listener
 		// if config has timed set 
 		if (plugin.getConfig().isConfigurationSection ("nerf_fire.timedcauses")) { // only incur overhead if this config turns it on
 			if (timedMgr == null) {
-				plugin.log.info ("Starting timed fire manager");
-				timedMgr = new TimedManager (this.plugin);
-				
-				plugin.getServer().getPluginManager().registerEvents (timedMgr, plugin);
+				createTimedMgr();
 			}
 			timedMgr.initConfig();
 		} else
@@ -174,6 +172,35 @@ public class AntiFireman implements Listener
 		
 		if (writeDefault)
 			plugin.saveDefaultConfig();
+	}
+	private void createTimedMgr () {
+		plugin.log.info ("Starting timed fire manager");
+		timedMgr = new TimedManager (this.plugin);
+	
+		plugin.getServer().getPluginManager().registerEvents (timedMgr, plugin);
+	}
+	public boolean clearTimedConfig() {
+		if (timedMgr != null) {
+			timedMgr.clearConfig ();
+			return true;
+		}
+		return false;
+	}
+	public boolean clearTimedConfig (IgniteCause cause) {
+		if (timedMgr != null && timedMgr.ifTimedDelayFor (cause)) {
+			return timedMgr.clearConfig (cause);
+		}
+		return false;
+	}
+	public boolean setTimedConfig (IgniteCause cause, long delay) 
+	{
+		if (cause == null)
+			return false;
+			
+		if (timedMgr == null && delay > 0) {
+			createTimedMgr();
+		}
+		return timedMgr.setConfig (cause, delay);
 	}
 	
 	private void printMsg (CommandSender requestor, String msg)
@@ -194,7 +221,45 @@ public class AntiFireman implements Listener
 	{
 		return printConfig (null);
 	}
+	public boolean printConfigKey (CommandSender requestor, String key) {
+		if (plugin.getConfig().isInt(key))
+			printMsg (requestor, key + ": " + plugin.getConfig().getInt(key));
+		else if (plugin.getConfig().isLong(key))
+			printMsg (requestor, key + ": " + plugin.getConfig().getLong(key));
+		else if (plugin.getConfig().isBoolean(key)) 
+			printMsg (requestor, key + ": " + plugin.getConfig().getBoolean(key));
+		else if (key.indexOf ("blocklist") > 0) 
+			FireResistantList.printList (requestor);
+		else if (plugin.getConfig().isString(key))
+		{
+			printMsg (requestor, key + ": " + plugin.getConfig().getString(key));
+		}
+		else if (plugin.getConfig().isList (key)) {
+			printMsg (requestor, key + ": " + plugin.getConfig().getList(key)); 
+		} else {
+			plugin.log.warning ("Fireman: Unrecognized config key: " + key);
+			return false;
+		}
+		return true;
+	}
 	
+	// Prints to requestor the config.yml from the supplied node			
+	public boolean printConfig(CommandSender requestor, String node) {
+      if ( !plugin.getConfig().isConfigurationSection (node)) {
+        plugin.log.warning ("Not a config section: '" + node + "'");
+        return false;
+      }
+
+      for (String key : plugin.getConfig().getConfigurationSection(node).getKeys(true)) {
+            String FQK = node + "." + key;
+            
+			if	(plugin.getConfig().isConfigurationSection (FQK))
+				continue;
+			printConfigKey (requestor, FQK);	
+      }
+      return true;
+	}
+
 	public boolean printConfig(CommandSender requestor) 
 	{
 		for (String key : plugin.getConfig().getConfigurationSection ("nerf_fire").getKeys(true)) {
@@ -202,21 +267,7 @@ public class AntiFireman implements Listener
 			
 			if	(plugin.getConfig().isConfigurationSection (key))
 				continue;
-			
-			else if (plugin.getConfig().isInt(key))
-				printMsg (requestor, key + ": " + plugin.getConfig().getInt(key));
-			else if (plugin.getConfig().isBoolean(key)) 
-				printMsg (requestor, key + ": " + plugin.getConfig().getBoolean(key));
-			else if (key.indexOf ("blocklist") > 0) 
-				FireResistantList.printList (requestor);
-			else if (plugin.getConfig().isString(key))
-			{
-				printMsg (requestor, key + ": " + plugin.getConfig().getString(key));
-			}
-			else if (plugin.getConfig().isList (key)) {
-				printMsg (requestor, key + ": " + plugin.getConfig().getList(key)); 
-			} else 
-				plugin.log.warning ("Fireman: Unrecognized config key: " + key);
+			printConfigKey (requestor, key);	
 		}
 		return true;
 	}

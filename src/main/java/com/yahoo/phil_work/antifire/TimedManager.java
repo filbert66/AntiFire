@@ -42,16 +42,82 @@ class TimedManager implements Listener {
 		for (String k : conf.getKeys (false)) {
 			long del = conf.getLong (k);
 			TimedFireCauses tc = new TimedFireCauses (k, del);
-			if (tc.Cause == null) 
+			if (tc.Cause == null) {
 				plugin.getLogger().warning ("Unrecognized ignite cause: '" + k + "'. Refer to http://bit.ly/1gsdblo");
+				conf.set (k, null); // removes from memory
+			}
 			else {
 				TimedCause.put (tc.Cause, tc.BurnMillisecs);
 			
-				plugin.getLogger().config ("Added timed fire of delay " + del + " for " + tc.Cause);
+				plugin.getLogger().config ("Added timed fire of delay " + del + " ticks for " + tc.Cause);
+				
+				// normalize RAM config, for easy finding on modification by commands
+				if ( !k.equals (tc.Cause.toString())) {
+					conf.set (tc.Cause.toString(), tc.BurnMillisecs); // add canonical name
+					conf.set (k, null);	// remove alt name
+				}
 			}
 		}
 	}		
 
+	/*
+	 * These config functions all deal in user-consummable millisecond delays
+	 */
+	// setConfig will NOT affect exsting timed blocks. 
+	//   if provided delay is <0, clears any configuration for that Cause
+	//   if provided delay is < 1 tick, fails.
+	
+	// TODO: Function to clear any timed blocks
+	public boolean setConfig (String cause, long millisecs) {
+		return setConfig (IgniteCause.matchIgniteCause (cause), millisecs);
+	}
+	public boolean setConfig (IgniteCause cause, long millisecs) {
+		ConfigurationSection conf = plugin.getConfig().getConfigurationSection ("nerf_fire.timedcauses");
+
+		if (cause == null)
+			return false;
+		else if (millisecs < 0) {
+			if (ifTimedDelayFor (cause)) {
+				plugin.getLogger().config ("Removing any timed fire for cause " + cause);
+				TimedCause.remove (cause);
+			}				
+			if (conf != null) {
+				conf.set (cause.toString(), null); // removes mapping from RAM config
+				if (conf.getKeys(false).isEmpty())
+					conf.getParent().set ("timedcauses", null); // remove section
+			}
+			return true;
+		}
+		else if (millisecs < 1000L/20) { //invalid delay
+			return false;
+		}
+		TimedCause.put (cause, millisecs);
+		
+		// Now set config in RAM
+		if (conf == null) {
+			conf = plugin.getConfig().createSection ("nerf_fire.timedcauses");
+			plugin.getLogger().config ("Creating first timedcauses config item for " + cause);
+		}	
+		conf.set (cause.toString(), millisecs); 
+		return true;
+	}
+	public boolean clearConfig (IgniteCause cause) {
+		return setConfig (cause, -1);
+	}
+	public void clearConfig () {
+		for (IgniteCause c : IgniteCause.values())
+			clearConfig (c);
+	}
+	public long getConfig (IgniteCause cause) {
+		if (! ifTimedDelayFor (cause))
+			return -1;
+		
+		return TimedCause.get (cause);
+	}
+	public long getConfig (String cause) {
+		return getConfig (IgniteCause.matchIgniteCause (cause));
+	}
+	
 	// Class for parsing configuration strings
 	class TimedFireCauses {	
 		TimedFireCauses (IgniteCause c, long d) {

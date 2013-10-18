@@ -15,6 +15,7 @@
  *  17 May 2013 : PSW : Added commands for charcoaldrop settings; can't set charcoaldrop.treetypedrop
  *  12 Sep 2013 : PSW : Updated per latest Metrics API.
  *  23 Sep 2013 : PSW : Added commands for lava placement config
+ *  15 Oct 2013 : PSW : Added commands for timed config modding.
  */
  
  package com.yahoo.phil_work.antifire;
@@ -60,6 +61,8 @@ import org.mcstats.Metrics;
 import com.yahoo.phil_work.antifire.FireLogEntry;
 import com.yahoo.phil_work.antifire.AntifireLog;
 import com.yahoo.phil_work.BlockIdList;
+import com.yahoo.phil_work.antifire.IgniteCause;
+
 
 /**
  * Fire control, for placement, damage, spread. Includes logging and command to TP to last fire placement
@@ -481,6 +484,58 @@ public class AntiFire extends JavaPlugin {
 		else if (commandName.equals("flush")) {
 			flushLog(sender);
 			return true;									
+		}
+		else if (commandName.equals("timed")) {
+			final String TimedName = "nerf_fire.timedcauses";
+			
+			if (args.length == 1) 
+				antiFire.printConfig (sender, TimedName);
+			else {
+				String key = args[1];
+				IgniteCause cause = IgniteCause.matchIgniteCause (key);
+				if (cause == null) {
+					if ( !key.equals ("clear")) {
+						sender.sendMessage ("Unknown ignite cause '" + key + "'");
+						return false;					
+					}
+					// else equals clear
+					if (antiFire.clearTimedConfig ()) {
+						sender.sendMessage ("Removed all fire delays");
+					} else
+						sender.sendMessage ("No configured fire delays to clear");
+					return true;
+				}
+				if (args.length == 2) { // no param; just print that one
+					String FQK = TimedName + "." + cause.toString();
+					if (this.getConfig().isSet (FQK))
+						return antiFire.printConfigKey (sender, FQK);
+					else 
+						sender.sendMessage (key + " is not a currently configured timed cause.");
+				} else { // want to set one value
+					try { 
+						long delay = Long.parseLong (args[2]);	
+						boolean result = antiFire.setTimedConfig (cause, delay);
+						if ( !result)
+							sender.sendMessage ("Unable to set " + cause + " to " + delay + " delay");
+						else if (delay > 0)
+							sender.sendMessage ("Set delay of " + delay + "ms for fire cause of " + cause);
+						else 
+							sender.sendMessage ("Removed any delay for fire cause " + cause);
+						
+					} catch (Exception exc) {
+						if (args[2].equals ("clear")) {
+							if (antiFire.clearTimedConfig (cause))
+								sender.sendMessage ("Removed delay for fire cause " + cause);
+							else
+								sender.sendMessage ("No delay configured for " + cause);
+						} else {
+							sender.sendMessage ("invalid value for timed delay");
+							return false;
+						}
+					}	
+				}
+			}
+			return true;
 		}
 		else if (commandName.equals("spread")) {
 			if (args.length == 1) {
