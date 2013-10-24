@@ -1,4 +1,6 @@
 // See here: http://wiki.bukkit.org/Scheduler_Programming
+// Removed doDaylightCycle dependency
+
  package com.yahoo.phil_work.antifire;
 
 import java.util.Comparator;
@@ -29,22 +31,24 @@ class TimedExtinguisher extends	BukkitRunnable {
 	TimedExtinguisher (Plugin p, World w) 
 	{ 
 		if (p == null || w == null)
-			throw new NullPointerException("in Scheduled constructor");
+			throw new NullPointerException("in TimedExtinguisher constructor");
 		world = w;	
 		plugin = p; 
 		FixedLengthBlocks = new TreeSet<TimedBlock> (new TimedBlock.TimedBlockComparator());
 		
 		String worldName = w.getName();
-		if (w.getGameRuleValue ("doDaylightCycle").equals (String.valueOf (false))) {
-			plugin.getLogger().warning ("scheduled fire outage won't work without doDaylightCycle=true in " + worldName);
-			throw new IllegalStateException ("need daylightCycle in " + worldName);
-		}
 	}
-
+	long ticksToMillisecs (final long ticks) {
+		return ticks * 1000 /20L; 
+	}
+	long millisecsToTicks (final long ms) {
+		return ms * 20L /1000L; 
+	}
 	// Managing list of blocks to put out
-	// delay MUST be in ticks
+	// delay MUST be in TICKS
 	public void add (BlockState state, long delay) {
-		long expiry = delay + this.world.getFullTime();
+		// expiry in TICKs
+		long expiry = ticksToMillisecs (delay) + System.currentTimeMillis();
 		
 		if (state == null) return;
 		
@@ -68,8 +72,8 @@ class TimedExtinguisher extends	BukkitRunnable {
 				}
 			}
 			else {
-				long future = FixedLengthBlocks.first().getExpiry() - world.getFullTime();
-				plugin.getLogger().fine ("Already scheduled for '" + world.getName() + "' in " + future + " ticks");
+				long future = FixedLengthBlocks.first().getExpiry() - System.currentTimeMillis();
+				plugin.getLogger().fine ("Already scheduled for '" + world.getName() + "' in " + future + " ms");
 			}
 		} else
 			plugin.getLogger().warning ("attempted to log block to wrong TimedExtinguisher");
@@ -121,7 +125,7 @@ class TimedExtinguisher extends	BukkitRunnable {
 
 	@Override
 	public void run () {
-		final long now = this.world.getFullTime();
+		final long now = System.currentTimeMillis();
 		long nextOut = now + 20 * 60 * 60 * 4; // not used, but to avoid compiler warning
 		
 		plugin.getLogger().finer ("periodic extinguisher task running for " + FixedLengthBlocks.size() + " blocks");
@@ -136,7 +140,7 @@ class TimedExtinguisher extends	BukkitRunnable {
 						plugin.getLogger().warning ("Unable to put out block at " + b.getLocation() + 
 						"; changed to " + b.getBlock().getType());
 					else
-						plugin.getLogger().finer ("block update to put out fire worked");
+						plugin.getLogger().finer ("block update to put out fire at " + b.getExpiry() + " worked");
 				}
 				else // Shouldn't get this error unless user or fade put the fire out, or block burnt
 					plugin.getLogger().info ("Fire block changed before timeout to " + b.getBlock().getType());
@@ -146,7 +150,7 @@ class TimedExtinguisher extends	BukkitRunnable {
 			}
 			else {
 				nextOut = b.getExpiry();
-				// plugin.getLogger().fine ("Got beyond now (" + now + ") to next extinguish scheduled at " + nextOut);
+				plugin.getLogger().fine ("Got beyond now (" + now + ") to next extinguish scheduled at " + nextOut);
 				break; // found the next timeout in sorted list; can stop
 			}
 		} 
@@ -170,7 +174,7 @@ class TimedExtinguisher extends	BukkitRunnable {
 			}
 		}
 	    if ( !FixedLengthBlocks.isEmpty()) try {
-			long delay = nextOut - now;
+			long delay = millisecsToTicks (nextOut - now);
 			myTask = plugin.getServer().getScheduler().runTaskLater (this.plugin, this, delay);  
 			plugin.getLogger().fine ("Rescheduled extinguish in " + world.getName() + " in " + delay + " ticks");
 		} catch (IllegalArgumentException e) {

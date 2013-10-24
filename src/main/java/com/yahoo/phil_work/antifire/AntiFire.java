@@ -288,6 +288,20 @@ public class AntiFire extends JavaPlugin {
     }
 **/
 
+    void sendMsg (CommandSender requestor, String msg)
+	{
+		if (requestor == null)
+			return;
+			
+		if (requestor instanceof Player) {
+			requestor.sendMessage (msg);
+		}
+		else // Server console. Color codes may look nice on a terminal, but not on text file
+		{
+			requestor.sendMessage(ChatColor.stripColor (msg));
+		}
+	}
+
     @Override
     public boolean onCommand(CommandSender sender, Command command, String commandLabel, String[] args) {
         String commandName = command.getName().toLowerCase();
@@ -340,7 +354,7 @@ public class AntiFire extends JavaPlugin {
 			// Try to see if it's a player name
 			String p = args [0];
 			if ( !validName (p)) {
-				sender.sendMessage(ChatColor.RED + "bad player name '" + p + "'");
+				sendMsg (sender, ChatColor.RED + "bad player name '" + p + "'");
                 return true;
             } 
 
@@ -395,7 +409,7 @@ public class AntiFire extends JavaPlugin {
 		} else { // try to parse as a player name. BUG: Crash on multi-digit "name"
 			String n = args [0];
 			if ( !validName (n)) {
-				sender.sendMessage(ChatColor.RED + "bad player name '" + n + "'");
+				sendMsg (sender, ChatColor.RED + "bad player name '" + n + "'");
                 return true;
             } else if ( !sender.getServer().getOfflinePlayer(n).hasPlayedBefore()) {
 				sender.sendMessage ("'" + n + "' has never played before");
@@ -495,14 +509,14 @@ public class AntiFire extends JavaPlugin {
 				IgniteCause cause = IgniteCause.matchIgniteCause (key);
 				if (cause == null) {
 					if ( !key.equals ("clear")) {
-						sender.sendMessage ("Unknown ignite cause '" + key + "'");
+						sendMsg (sender, ChatColor.RED + "Unknown ignite cause '" + ChatColor.RESET + key + "'");
 						return false;					
 					}
 					// else equals clear
 					if (antiFire.clearTimedConfig ()) {
 						sender.sendMessage ("Removed all fire delays");
 					} else
-						sender.sendMessage ("No configured fire delays to clear");
+						sendMsg (sender, ChatColor.YELLOW + "No configured fire delays to clear");
 					return true;
 				}
 				if (args.length == 2) { // no param; just print that one
@@ -510,13 +524,13 @@ public class AntiFire extends JavaPlugin {
 					if (this.getConfig().isSet (FQK))
 						return antiFire.printConfigKey (sender, FQK);
 					else 
-						sender.sendMessage (key + " is not a currently configured timed cause.");
+						sendMsg (sender, ChatColor.YELLOW + key + " is not a currently configured timed cause.");
 				} else { // want to set one value
 					try { 
 						long delay = Long.parseLong (args[2]);	
 						boolean result = antiFire.setTimedConfig (cause, delay);
 						if ( !result)
-							sender.sendMessage ("Unable to set " + cause + " to " + delay + " delay");
+							sendMsg (sender, ChatColor.YELLOW + "Unable to set " + cause + " to " + delay + " delay");
 						else if (delay > 0)
 							sender.sendMessage ("Set delay of " + delay + "ms for fire cause of " + cause);
 						else 
@@ -527,9 +541,9 @@ public class AntiFire extends JavaPlugin {
 							if (antiFire.clearTimedConfig (cause))
 								sender.sendMessage ("Removed delay for fire cause " + cause);
 							else
-								sender.sendMessage ("No delay configured for " + cause);
+								sendMsg (sender, ChatColor.YELLOW + "No delay configured for " + cause);
 						} else {
-							sender.sendMessage ("invalid value for timed delay");
+							sendMsg (sender, ChatColor.RED + "invalid value for timed delay");
 							return false;
 						}
 					}	
@@ -596,7 +610,7 @@ public class AntiFire extends JavaPlugin {
 						int max = Integer.parseInt(args[2]);
 						this.getConfig().set("nerf_fire.charcoaldrop.max", max);
 
-						sender.sendMessage ("Set " + ChatColor.BLUE + "nerf_fire.charcoaldrop.max" + ChatColor.RESET + " to " + max);
+						sendMsg (sender, "Set " + ChatColor.BLUE + "nerf_fire.charcoaldrop.max" + ChatColor.RESET + " to " + max);
 						return true;
 					} catch (Exception exc) {
 						sender.sendMessage ("invalid value for charcoaldrop.max");
@@ -606,7 +620,7 @@ public class AntiFire extends JavaPlugin {
 					boolean ifRandom = args[1].toLowerCase().equals("random");
 					this.getConfig().set("nerf_fire.charcoaldrop.random", ifRandom);
 
-					sender.sendMessage ("Set " + ChatColor.BLUE + "nerf_fire.charcoaldrop.random" + ChatColor.RESET + " to " + ifRandom);
+					sendMsg (sender, "Set " + ChatColor.BLUE + "nerf_fire.charcoaldrop.random" + ChatColor.RESET + " to " + ifRandom);
 					return true;
 				} else if ( !(sender instanceof Player)) {
 					sender.sendMessage (pdfFile.getName() + ": Cannot get current world of SERVER");
@@ -638,13 +652,13 @@ public class AntiFire extends JavaPlugin {
 			boolean ifSet = this.getConfig().getBoolean ("nerf_fire.nostartby.op");
 			
 			if (args.length == 1) {
-				sender.sendMessage ("OPs are " + (ifSet ? "" : ChatColor.RED + "NOT " + ChatColor.RESET) + "allowed to start fires");
+				sendMsg (sender, "OPs are " + (ifSet ? "" : ChatColor.RED + "NOT " + ChatColor.RESET) + "allowed to start fires");
 				return true;
 			}
 			// else have a param
 			boolean turnOn = args[1].toLowerCase().equals ("true");
 			this.getConfig().set ("nerf_fire.nostartby.op", !turnOn);
-			sender.sendMessage (ChatColor.BLUE + "nerf_fire.nostartby.op" + ChatColor.DARK_BLUE + 
+			sendMsg (sender, ChatColor.BLUE + "nerf_fire.nostartby.op" + ChatColor.DARK_BLUE + 
 								" now " + ChatColor.GRAY + !turnOn);
 			return true;
 		}				
@@ -652,13 +666,13 @@ public class AntiFire extends JavaPlugin {
 			boolean ifSet = this.getConfig().getBoolean ("nerf_fire.noplacelavaby.op");
 			
 			if (args.length == 1) {
-				sender.sendMessage ("OPs are " + (ifSet ? ChatColor.RED + "NOT " + ChatColor.RESET : "") + "allowed to place lava");
+				sendMsg (sender, "OPs are " + (ifSet ? ChatColor.RED + "NOT " + ChatColor.RESET : "") + "allowed to place lava");
 				return true;
 			}
 			// else have a param
 			boolean turnOn = args[1].toLowerCase().equals ("true");
 			this.getConfig().set ("nerf_fire.noplacelavaby.op", !turnOn);
-			sender.sendMessage (ChatColor.BLUE + "nerf_fire.noplacelavaby.op" + ChatColor.DARK_BLUE + 
+			sendMsg (sender, ChatColor.BLUE + "nerf_fire.noplacelavaby.op" + ChatColor.DARK_BLUE + 
 								" now " + ChatColor.GRAY + !turnOn);
 			return true;
 		}				
@@ -804,7 +818,7 @@ public class AntiFire extends JavaPlugin {
 					}
 					else if (item.equals ("op")) {
 						this.getConfig().set (logConfig, true);
-						sender.sendMessage (ChatColor.BLUE + logConfig + ChatColor.DARK_BLUE + " now " + ChatColor.RED + "effective");
+						sendMsg (sender, ChatColor.BLUE + logConfig + ChatColor.DARK_BLUE + " now " + ChatColor.RED + "effective");
 						return true;
 					} else
 						newLog.add (wName);
@@ -814,7 +828,7 @@ public class AntiFire extends JavaPlugin {
 					
 					if (item.equals ("op")) {
 						this.getConfig().set (logConfig, turnOn);
-						sender.sendMessage (ChatColor.BLUE + logConfig + ChatColor.DARK_BLUE + " now " + (turnOn ? ChatColor.RED + "effective" : "off"));
+						sendMsg (sender, ChatColor.BLUE + logConfig + ChatColor.DARK_BLUE + " now " + (turnOn ? ChatColor.RED + "effective" : "off"));
 						return true;
 					}
 					
@@ -835,7 +849,7 @@ public class AntiFire extends JavaPlugin {
 					}
 				}				
 				this.getConfig().set (logConfig, newLog);
-				sender.sendMessage (ChatColor.BLUE + logConfig + ChatColor.DARK_BLUE + 
+				sendMsg (sender, ChatColor.BLUE + logConfig + ChatColor.DARK_BLUE + 
 									" now effective in: " + ChatColor.GRAY + newLog);
 			}
 			return true;									
@@ -1018,7 +1032,7 @@ public class AntiFire extends JavaPlugin {
 				if (w.getName().equals (args [1])) 
 					return extinguishWorld (sender, w);
 			}					
-			sender.sendMessage ("World '" + args[1] + "' not found.");
+			sendMsg (sender, "World '" + args[1] + "' not found.");
 			return true;
 		}
 		else if (param.equals ("all")) {
@@ -1051,7 +1065,7 @@ public class AntiFire extends JavaPlugin {
 			} else { // try to parse as a player name. BUG: Crash on multi-digit "name"
 				String n = args [1];
 				if ( !validName (n)) {
-					sender.sendMessage(ChatColor.RED + "bad player name '" + n + "'");
+					sendMsg (sender, ChatColor.RED + "bad player name '" + n + "'");
 					return true;
 				} else if ( !sender.getServer().getOfflinePlayer(n).hasPlayedBefore()) {
 					sender.sendMessage ("'" + n + "' has never played before");
