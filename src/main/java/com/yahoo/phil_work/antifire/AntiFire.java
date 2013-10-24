@@ -524,7 +524,7 @@ public class AntiFire extends JavaPlugin {
 					if (this.getConfig().isSet (FQK))
 						return antiFire.printConfigKey (sender, FQK);
 					else 
-						sendMsg (sender, ChatColor.YELLOW + key + " is not a currently configured timed cause.");
+						sendMsg (sender, key + ChatColor.YELLOW + " is not a currently configured timed cause.");
 				} else { // want to set one value
 					try { 
 						long delay = Long.parseLong (args[2]);	
