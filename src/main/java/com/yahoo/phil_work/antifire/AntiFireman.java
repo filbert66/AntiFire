@@ -455,7 +455,8 @@ public class AntiFireman implements Listener
 				}
 
 			// Call TimedBlock here.
-			if (timedMgr.ifTimedDelayFor (detailedCause) && !burnsForever (block)) 
+			if (timedMgr != null && 
+				timedMgr.ifTimedDelayFor (detailedCause) && !burnsForever (block)) 
 				timedMgr.setTimedDelay (detailedCause, event.getBlock().getState());
 			
 			if (shouldLog)
@@ -572,6 +573,7 @@ public class AntiFireman implements Listener
 				// plugin.log.finer ("detected LOG of type " + treeType + " data: " + treeType.getData());
 				List <Short> treeTypeMax = plugin.getConfig().getShortList ("nerf_fire.charcoaldrop.treetypemax");
 
+				// Could call treeType.ordinal() to get int value
 				if (treeTypeMax.size() > treeType.getData()) {
 					max = treeTypeMax.get(treeType.getData());
 					// plugin.log.finer ("Reset max charcoal for type " + treeType + " to " + max);
@@ -610,7 +612,7 @@ public class AntiFireman implements Listener
 			// will this put the fire out, or will it burn indefinitely like netherack?
 			// Burns indefinitely.
 		}
-		else if (timedMgr.isBeingTimed (getFireBlockFrom (event.getBlock().getLocation()))) {
+		else if (timedMgr != null && timedMgr.isBeingTimed (getFireBlockFrom (event.getBlock().getLocation()))) {
 			plugin.log.finer ("stopped timed fire block destruction at (" + event.getBlock().getLocation());
 			event.setCancelled (true);
 			return; // don't check for spread

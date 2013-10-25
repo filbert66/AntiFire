@@ -4,7 +4,7 @@
 
 	<groupId>com.yahoo.phil_work</groupId>
 	<artifactId>antifire</artifactId>
-	<version>2.1.1</version>
+	<version>2.1.2</version>
 	<packaging>jar</packaging>
 
 	<name>AntiFire</name>
@@ -18,8 +18,8 @@
             <groupId>org.bukkit</groupId>
             <artifactId>bukkit</artifactId>
             <!-- Bukkit API Version, change if necessary -->
-            <!-- REleased builds: <version>1.6.4-R0.1</version> -->
-            <version>1.6.4-R0.1-SNAPSHOT</version>
+            <version>1.6.4-R1.0</version>
+            <!-- <version>1.6.4-R0.1-SNAPSHOT</version> -->
         </dependency>
     <dependency>
         <groupId>org.mcstats.bukkit</groupId>
