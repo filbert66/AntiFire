@@ -7,6 +7,7 @@
  *  01 Dec 2012: Added option to use matchMaterial(string).
  *  04 Dec 2012: Allow for spaces in pattern match; fixed NP bug in parseBlockList (String, CommandSender) 
  *  31 Jan 2013: Ignore space for string material names
+ *  18 Dec 2013: Add support for custom matchMaterialData(string).
  */
 
 package com.yahoo.phil_work;
@@ -23,6 +24,7 @@ import org.bukkit.plugin.PluginLogger;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.Material;
+import org.bukkit.material.MaterialData;
 
 import org.bukkit.command.CommandSender;
 import org.bukkit.ChatColor;
@@ -74,7 +76,7 @@ public class BlockIdList {
 		this.parseBlockList (init, null);
 	}
 	
-    // Adds given string of IDs to existing list.
+    // Adds given string of IDs or names to existing list.
 	public BlockIdList parseBlockList (String init, CommandSender sender) {
 		try{
 			String[] split = init.split(",");
@@ -87,12 +89,15 @@ public class BlockIdList {
 				 {  // may include form of #:#					
 					if (elem.length() > 0)
 					 {
-						Material mat = Material.matchMaterial (elem.trim());
-						if (mat != null) 
-							blockList.add (new BlockId (mat.getId()));
+						MaterialData md = MaterialDataStringer.matchMaterialData (elem.trim());
+						if (md != null) {
+							blockList.add (new BlockId (md));
+							// log.config ("matched new MaterialData name: '" + elem.trim() + "'");
+						}
 						else
 					    {
 							m = p.matcher (elem);
+							elem = elem.trim();
 							
 							if (m.matches())
 								blockList.add (new BlockId(elem.trim()));

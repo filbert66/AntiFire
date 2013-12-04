@@ -45,6 +45,9 @@
 					<target>1.6</target>
 					<debug>false</debug>
 					<optimize>true</optimize>
+					<excludes>
+						<exclude>**/Explosion_Nerfing_Plugin.java</exclude>
+					</excludes>
 				</configuration>
 			</plugin>
 			<plugin>

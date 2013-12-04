@@ -1,32 +1,54 @@
-/* Thanks to
- * package com.nitnelave.CreeperHeal;
+/* Origins: Thanks to package com.nitnelave.CreeperHeal;
+ * History: 
+ * 	3 Dec 2013 : Permit initialization with MaterialDataStringer
  */
 
 package com.yahoo.phil_work;
+
+import org.bukkit.Material;
+import org.bukkit.material.MaterialData;
+import com.yahoo.phil_work.MaterialDataStringer;
  
 public class BlockId {
 	int id;
 	byte data;
 	boolean hasData;
+	boolean fromInts;
 
+	public BlockId () {
+		this (0, (byte)0);
+	}
 	public BlockId(int type_id){
-		id = type_id;
-		data = 0;
-		hasData = false;
+		this (type_id, (byte)0);
 	}
 	
 	public BlockId(int type_id, byte data_value) {
 		id = type_id;
 		data = data_value;
 		hasData = (data_value != 0);
+		fromInts = true;
+	}
+	
+	// alternative way to create; expected use is new BlockId (MaterialDataStringer.matchMaterialData (string))
+	public BlockId (MaterialData md) {
+		if (md != null) {
+			id = md.getItemTypeId();
+			data = md.getData();
+			hasData = (data != 0);
+			
+			fromInts = false;
+		} else {
+			id = data = 0;
+			hasData = false;
+		}
 	}
 	
 	public BlockId(String str){
+		this();
 		str = str.trim();
+		fromInts = true;
 		try{
 			id = Integer.parseInt(str);
-			data = 0;
-			hasData = false;
 		}
 		catch(NumberFormatException e){
 			String[] split = str.split(":");
@@ -37,15 +59,9 @@ public class BlockId {
 					hasData = true;
 				}
 				catch(NumberFormatException ex){
-					id = 0;
-					data = 0;
-					hasData = false;
 				}
 			}
 			else {
-				id = 0;
-				data = 0;
-				hasData = false;
 			}
 		}
 	}
@@ -62,12 +78,22 @@ public class BlockId {
 		return hasData;
 	}
 	
+	// report in the format that was supplied
 	@Override
 	public String toString(){
-		String str = new String();
-		str += String.valueOf(id);
-		if(hasData)
-			str += ":" + String.valueOf(data);
+		String str; 
+		
+		if (fromInts) {
+			str = new String();
+			str += String.valueOf(id);
+			if(hasData)
+				str += ":" + String.valueOf(data);
+		} else {
+			if (hasData) 
+				str = new MaterialDataStringer (id, data).toString();
+			else
+				str = Material.getMaterial (id).toString();
+		}
 		return str;
 	}
 	

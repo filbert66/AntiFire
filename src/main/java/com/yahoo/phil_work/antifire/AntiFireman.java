@@ -27,6 +27,7 @@
  * 25 Sep 2013 : PSW : Adding Timed-based functions and config.
  * 10 Oct 2013 : PSW : Support command to modify TimedMgr configuration.
  * 22 Nov 2013 : PSW : Use new MaterialDataStringer.
+ * 04 Dec 2013 : PSW : Used MaterialDataStringer in fireproof player messages.
  */
 
  package com.yahoo.phil_work.antifire;
@@ -448,7 +449,7 @@ public class AntiFireman implements Listener
 					plugin.log.fine ("blocked fire start on resistant block type " + block.getType() + " in " + worldName);
 					if (p != null)
 						p.sendMessage (plugin.pluginName + " says block " + 
-									   block.getType() + (b.hasData() ? ":"+ block.getData():"") + " is fire resistant");
+									   new MaterialDataStringer (block.getType(),block.getData()) + " is fire resistant");
 					event.setCancelled (true);
 					this.fireProofed++;
 					return;
