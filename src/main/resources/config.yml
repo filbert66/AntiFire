@@ -3,6 +3,7 @@
 # 16 May 2013: Added noburn(mob|player)by
 # 13 Jun 2013: Added charcoaldrop node
 # 22 SEp 2013: added lava place nodes
+# 23 Nov 2013: Added speciesmax, variable charcoal accepting Material names.
 
 nerf_fire:
   logstart:
@@ -13,6 +14,7 @@ nerf_fire:
 #    fireball: 
 #    explosion: 
   whitelist: false
+#  blocklist: WOOL, HAY
   nospread: world
   nostartby:
     op: false
@@ -54,6 +56,9 @@ nerf_fire:
   charcoaldrop:
     random: true
     max: 3
-    # Set in order of Oak/Generic, Spruce/Redwood, Birch, Jungle
-    #treetypemax: [2,3,0,1]
-
+    speciesmax:  
+      JUNGLE_LOG: 0
+      OAK_LOG: 2
+      BIRCH_LOG: 1
+      SPRUCE_LOG: 3
+# Also will support ACACIA_LOG and DARKOAK_LOG from 1.7

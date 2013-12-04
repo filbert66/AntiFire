@@ -26,6 +26,7 @@
  * 22 Sep 2013 : PSW : Added lava place functionality in BucketEmpty. 
  * 25 Sep 2013 : PSW : Adding Timed-based functions and config.
  * 10 Oct 2013 : PSW : Support command to modify TimedMgr configuration.
+ * 22 Nov 2013 : PSW : Use new MaterialDataStringer.
  */
 
  package com.yahoo.phil_work.antifire;
@@ -55,6 +56,7 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.player.PlayerBucketEmptyEvent;
 
 import org.bukkit.Material;
+import org.bukkit.material.Coal;
 import org.bukkit.TreeSpecies;
 import org.bukkit.material.Tree;
 import org.bukkit.Location;
@@ -82,6 +84,7 @@ import org.bukkit.Bukkit;
 
 import com.yahoo.phil_work.BlockId;
 import com.yahoo.phil_work.BlockIdList;
+import com.yahoo.phil_work.MaterialDataStringer;
 import com.yahoo.phil_work.antifire.FireLogEntry;
 import com.yahoo.phil_work.antifire.AntifireLog;
 import com.yahoo.phil_work.antifire.IgniteCause;
@@ -560,6 +563,8 @@ public class AntiFireman implements Listener
 
 		plugin.log.finer ("AF: burning up block of type " + m);
 
+		// Should move config validation to startup, not runtime/eachtime code
+
 		if (m == Material.LOG && ifConfigContains ("nerf_fire.wooddropscharcoal", worldName)) {
 			int amount = 0;
 			int max = plugin.getConfig().getInt ("nerf_fire.charcoaldrop.max");
@@ -579,7 +584,24 @@ public class AntiFireman implements Listener
 					// plugin.log.finer ("Reset max charcoal for type " + treeType + " to " + max);
 				}
 				else
-					plugin.log.warning ("charcoaldrop.treetypemax needs 4 values; using charcoaldrop.max");
+					plugin.log.warning ("charcoaldrop.treetypemax missing value for " + TreeSpecies.getByData(b.getData()) + "(" + b.getData() + "); using charcoaldrop.max");
+			} else if (plugin.getConfig().isSet ("nerf_fire.charcoaldrop.speciesmax")) {
+				boolean found = false;
+				for (String matString : plugin.getConfig().getConfigurationSection ("nerf_fire.charcoaldrop.speciesmax").getKeys(/*deep=*/false)) {
+					MaterialData md = MaterialDataStringer.matchMaterialData (matString);
+					if (md == null) {
+						plugin.log.warning ("speciesmax: '" + matString + "' unrecognized Material. Refer to http://bit.ly/19sfyhe");
+					} else if (md.getItemType() != Material.LOG) {
+						plugin.log.warning ("speciesmax: expecting only LOG types, not " + md);
+						continue;
+					} else if (md.getData() == b.getData()) {
+						max = plugin.getConfig().getInt ("nerf_fire.charcoaldrop.speciesmax." + matString, max);
+						found = true;
+						break;
+					}
+				}
+				if (!found)
+					plugin.log.warning ("speciesmax doesn't contain " + new Tree (m,b.getData()) + "; using .max");
 			}
 
 			if (max > 0 && plugin.getConfig().getBoolean ("nerf_fire.charcoaldrop.random")) {				
@@ -589,7 +611,7 @@ public class AntiFireman implements Listener
 				amount = max;
 			
 			if (amount > 0) {
-				MaterialData mat = new MaterialData (Material.COAL, CoalType.CHARCOAL.getData());
+				MaterialData mat = new Coal (CoalType.CHARCOAL);
 				w.dropItem (b.getLocation(), mat.toItemStack (amount));
 				plugin.log.fine ("AF: dropping " + amount + " charcoal at " + b.getLocation());
 			}
