@@ -1,3 +1,8 @@
+/* MaterialDataStringer.java
+ * History
+ *  05 Dec 2013 : Corrected dark oak to "DARK_OAK"
+ *  14 Jan 2013 : Work around bug in Tree.setSpecies() that doesn't set type & data properly for new types.
+ */
 package com.yahoo.phil_work;
 
 import java.util.HashMap;
@@ -24,8 +29,11 @@ public class MaterialDataStringer extends MaterialData {
     static
     {
     	try {
-			newTreeTypes = Bukkit.getBukkitVersion().startsWith("1.7");    
+    		if (TreeSpecies.valueOf ("ACACIA") != null)
+				newTreeTypes = true;
 		} catch (NullPointerException e) {
+			newTreeTypes = false;
+		} catch (IllegalArgumentException  e) {
 			newTreeTypes = false;
 		}
 		
@@ -62,8 +70,14 @@ public class MaterialDataStringer extends MaterialData {
         altNames.put("REDWOOD_LOG", new Tree (TreeSpecies.REDWOOD));
         altNames.put("SPRUCE_LOG", new Tree (TreeSpecies.REDWOOD));
         if (newTreeTypes) {
-			altNames.put("ACACIA_LOG", new Tree (TreeSpecies.valueOf ("ACACIA")));
-			altNames.put("DARKOAK_LOG", new Tree (TreeSpecies.valueOf ("DARKOAK")));
+			System.out.println ("MaterialDataStringer: ACACIA and OAK present");
+			
+			// Work around Bukkit 1.7.2 bug that doesn't set Type() to LOG_2 when setting species.
+			Tree tree = new Tree (Material.LOG_2);
+			// Ref: http://minecraft.gamepedia.com/Data_values#Wood for only lower order 2 bits
+			tree.setData ((byte)(0x3 & TreeSpecies.valueOf ("ACACIA").getData())); altNames.put("ACACIA_LOG", tree);
+			tree = tree.clone();
+			tree.setData ((byte)(0x3 & TreeSpecies.valueOf ("DARK_OAK").getData())); altNames.put("DARKOAK_LOG", tree);
 		}        
 		Tree tree = new Tree (Material.WOOD); tree.setSpecies (TreeSpecies.GENERIC);
         altNames.put("GENERIC_WOOD", tree);  altNames.put("GENERIC_PLANKS", tree); 
@@ -76,9 +90,10 @@ public class MaterialDataStringer extends MaterialData {
         altNames.put("REDWOOD_WOOD", tree);        altNames.put("REDWOOD_PLANKS", tree);
         altNames.put("SPRUCE_WOOD", tree);        altNames.put("SPRUCE_PLANKS", tree);
         if (newTreeTypes) {
-			tree = tree.clone(); tree.setSpecies (TreeSpecies.valueOf ("ACACIA"));
+        	// Have to call setData vs. setSpecies since latter only sets lower 2 bits. 
+			tree = tree.clone(); tree.setData (TreeSpecies.valueOf ("ACACIA").getData());
 			altNames.put("ACACIA_WOOD", tree); 			altNames.put("ACACIA_PLANKS", tree);
-			tree = tree.clone(); tree.setSpecies (TreeSpecies.valueOf ("DARKOAK"));
+			tree = tree.clone(); tree.setData (TreeSpecies.valueOf ("DARK_OAK").getData());
 			altNames.put("DARKOAK_WOOD", tree);			altNames.put("DARKOAK_PLANKS", tree);
 		} 
         altNames.put("GENERIC_LEAVES", new Tree (Material.LEAVES, (byte)TreeSpecies.GENERIC.ordinal()));
@@ -88,8 +103,12 @@ public class MaterialDataStringer extends MaterialData {
         altNames.put("REDWOOD_LEAVES", new Tree (Material.LEAVES, (byte)TreeSpecies.REDWOOD.ordinal()));
         altNames.put("SPRUCE_LEAVES", new Tree (Material.LEAVES, (byte)TreeSpecies.REDWOOD.ordinal()));
         if (newTreeTypes) {
-			altNames.put("ACACIA_LEAVES", new Tree (Material.LEAVES, (byte)TreeSpecies.valueOf ("ACACIA").ordinal()));
-			altNames.put("DARKOAK_LEAVES", new Tree (Material.LEAVES, (byte)TreeSpecies.valueOf ("DARKOAK").ordinal()));
+			// Work around Bukkit 1.7.2 bug that doesn't set Type() to LOG_2 when setting species.
+        	tree = new Tree (Material.LEAVES_2);
+ 			// Ref: http://minecraft.gamepedia.com/Data_values#Leaves for only lower order 2 bits
+       		tree.setData ((byte)(0x3 & TreeSpecies.valueOf ("ACACIA").getData())); altNames.put("ACACIA_LEAVES", tree);
+			tree = tree.clone();
+			tree.setData ((byte)(0x3 & TreeSpecies.valueOf ("DARK_OAK").getData())); altNames.put("DARKOAK_LEAVES", tree);
 		} 
         altNames.put("GENERIC_SAPLING", new Tree (Material.SAPLING, (byte)TreeSpecies.GENERIC.ordinal()));
         altNames.put("OAK_SAPLING", new Tree (Material.SAPLING, (byte)TreeSpecies.GENERIC.ordinal()));
@@ -98,8 +117,9 @@ public class MaterialDataStringer extends MaterialData {
         altNames.put("REDWOOD_SAPLING", new Tree (Material.SAPLING, (byte)TreeSpecies.REDWOOD.ordinal()));
         altNames.put("SPRUCE_SAPLING", new Tree (Material.SAPLING, (byte)TreeSpecies.REDWOOD.ordinal()));
         if (newTreeTypes) {
+			// Have to init with byte vs. TreeSpecies since latter constructor only sets lower 2 bits. 
 			altNames.put("ACACIA_SAPLING", new Tree (Material.SAPLING, (byte)TreeSpecies.valueOf ("ACACIA").ordinal()));
-			altNames.put("DARKOAK_SAPLING", new Tree (Material.SAPLING, (byte)TreeSpecies.valueOf ("DARKOAK").ordinal()));
+			altNames.put("DARKOAK_SAPLING", new Tree (Material.SAPLING, (byte)TreeSpecies.valueOf ("DARK_OAK").ordinal()));
 		}
         altNames.put("SMOOTH_SANDSTONE", new Sandstone (SandstoneType.SMOOTH));
         altNames.put("GLYPHED_SANDSTONE", new Sandstone (SandstoneType.GLYPHED));

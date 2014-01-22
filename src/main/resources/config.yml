@@ -4,6 +4,7 @@
 # 13 Jun 2013: Added charcoaldrop node
 # 22 SEp 2013: added lava place nodes
 # 23 Nov 2013: Added speciesmax, variable charcoal accepting Material names.
+# 17 Jan 2014: Added anydropchance, DARKOAK_LOG and ACACIA_LOG
 
 nerf_fire:
   logstart:
@@ -61,4 +62,6 @@ nerf_fire:
       OAK_LOG: 2
       BIRCH_LOG: 1
       SPRUCE_LOG: 3
-# Also will support ACACIA_LOG and DARKOAK_LOG from 1.7
+      ACACIA_LOG: 4
+      DARKOAK_LOG: 5
+    anydropchance: 75

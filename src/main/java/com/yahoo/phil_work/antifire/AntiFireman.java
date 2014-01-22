@@ -28,6 +28,7 @@
  * 10 Oct 2013 : PSW : Support command to modify TimedMgr configuration.
  * 22 Nov 2013 : PSW : Use new MaterialDataStringer.
  * 04 Dec 2013 : PSW : Used MaterialDataStringer in fireproof player messages.
+ * 16 Jan 2013 : PSW : Recognize LOG_2 Material type for new logs; added anydropchance for all charcoal
  */
 
  package com.yahoo.phil_work.antifire;
@@ -562,19 +563,26 @@ public class AntiFireman implements Listener
 		World w = b.getWorld();
 		String worldName = w.getName();
 
-		plugin.log.finer ("AF: burning up block of type " + m);
-
 		// Should move config validation to startup, not runtime/eachtime code
 
-		if (m == Material.LOG && ifConfigContains ("nerf_fire.wooddropscharcoal", worldName)) {
+		if ((m == Material.LOG || m == Material.LOG_2) && ifConfigContains ("nerf_fire.wooddropscharcoal", worldName)) {
 			int amount = 0;
 			int max = plugin.getConfig().getInt ("nerf_fire.charcoaldrop.max");
-			
-		   // Allow max configurable by wood type
-			if (plugin.getConfig().isSet ("nerf_fire.charcoaldrop.treetypemax")) {
+			Tree t = new Tree (m,b.getData());
+	
+			// Have to use getSpecies() to strip out log orientation bits in the data byte
+			// can't use getSpecies.toString() since that will incorrectly show GENERIC for ACACIA
+			plugin.log.fine ("AF: burning up log of type " + m + ":" + t.getSpecies().getData()); 
+
+			int anyDropChance = plugin.getConfig().getInt ("nerf_fire.charcoaldrop.anydropchance");
+			if (rng.nextInt (100) > anyDropChance) {
+				plugin.log.finer ("No drop due to anydropchance of " +anyDropChance + "%");
+				max = 0;
+			}		
+		    // Allow max configurable by wood type
+			else if (plugin.getConfig().isSet ("nerf_fire.charcoaldrop.treetypemax")) {
 				// plugin.log.finer ("Found new treetypemax");
 				
-				Tree t = new Tree (m,b.getData());
 				TreeSpecies treeType = t.getSpecies();
 				// plugin.log.finer ("detected LOG of type " + treeType + " data: " + treeType.getData());
 				List <Short> treeTypeMax = plugin.getConfig().getShortList ("nerf_fire.charcoaldrop.treetypemax");
@@ -592,29 +600,41 @@ public class AntiFireman implements Listener
 					MaterialData md = MaterialDataStringer.matchMaterialData (matString);
 					if (md == null) {
 						plugin.log.warning ("speciesmax: '" + matString + "' unrecognized Material. Refer to http://bit.ly/19sfyhe");
-					} else if (md.getItemType() != Material.LOG) {
-						plugin.log.warning ("speciesmax: expecting only LOG types, not " + md);
-						continue;
-					} else if (md.getData() == b.getData()) {
-						max = plugin.getConfig().getInt ("nerf_fire.charcoaldrop.speciesmax." + matString, max);
-						found = true;
-						break;
-					}
+					} 
+					else if (md.getItemType() == m) 
+					{  // Need to be careful not to compare orientation bits in data
+						Tree testTree = new Tree (m, md.getData()); // gives orientation bits, but getSpecies() removes them
+						if (testTree.getSpecies() == t.getSpecies()) {
+							max = plugin.getConfig().getInt ("nerf_fire.charcoaldrop.speciesmax." + matString, max);
+							found = true;
+							break;
+						}
+					} // else plugin.log.info ("Not matching config ." + matString + "= " + md);
 				}
 				if (!found)
-					plugin.log.warning ("speciesmax doesn't contain " + new Tree (m,b.getData()) + "; using .max");
+					plugin.log.warning ("speciesmax doesn't contain " + new MaterialData (m,b.getData()) + "; using .max");
 			}
 
-			if (max > 0 && plugin.getConfig().getBoolean ("nerf_fire.charcoaldrop.random")) {				
-				// 50% chance of dropping something, equally divided from (1 to max)
-				amount = rng.nextInt(2) * (1+ rng.nextInt (max));
+			if (max > 0 && plugin.getConfig().getBoolean ("nerf_fire.charcoaldrop.random"))
+			{
+				amount = 1 + rng.nextInt (max);
+				// Changed to 75% chance, and make that chance also configurable as 0-100 int
+/**
+Chc	Max	average
+75%	1	0.75
+75%	2	1.125
+75%	3	1.5
+75%	4	1.875
+75%	5	2.25
+75%	6	2.625
+***/
 			} else 
 				amount = max;
 			
 			if (amount > 0) {
 				MaterialData mat = new Coal (CoalType.CHARCOAL);
 				w.dropItem (b.getLocation(), mat.toItemStack (amount));
-				plugin.log.fine ("AF: dropping " + amount + " charcoal at " + b.getLocation());
+				plugin.log.fine ("AF: dropping " + amount + " (max:" + max + ") charcoal at " + b.getLocation());
 			}
 		}
 				
