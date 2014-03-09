@@ -29,6 +29,8 @@
  * 22 Nov 2013 : PSW : Use new MaterialDataStringer.
  * 04 Dec 2013 : PSW : Used MaterialDataStringer in fireproof player messages.
  * 16 Jan 2013 : PSW : Recognize LOG_2 Material type for new logs; added anydropchance for all charcoal
+ * 09 Mar 2014 : PSW : Fixed TNT not triggering when "burnt up";
+ *                     New in 1.7.2-R0.3 ProjectileSource
  */
 
  package com.yahoo.phil_work.antifire;
@@ -66,6 +68,7 @@ import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
 import org.bukkit.material.MaterialData;
+import org.bukkit.projectiles.ProjectileSource;
 import org.bukkit.CoalType;
 import org.bukkit.Effect;
 import org.bukkit.entity.Entity;
@@ -73,6 +76,8 @@ import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Projectile;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.HumanEntity;
+import org.bukkit.entity.LivingEntity;
+import org.bukkit.entity.TNTPrimed;
 import org.bukkit.event.Listener;
 import org.bukkit.event.EventHandler;
 import org.bukkit.enchantments.Enchantment;
@@ -637,8 +642,21 @@ Chc	Max	average
 				plugin.log.fine ("AF: dropping " + amount + " (max:" + max + ") charcoal at " + b.getLocation());
 			}
 		}
-				
+		
 		b.setType (Material.AIR);
+		
+		if (m == Material.TNT) {  // just removed TNT; replace w primed
+			Location loc = b.getLocation();
+			try {
+				TNTPrimed tnt = w.spawn (loc, TNTPrimed.class);
+				if (tnt == null) 
+					plugin.log.warning ("Unable to spawn TNT at " + loc);
+				/** else 
+					tnt.setFuseTicks (tntTicks); **/
+			} catch (Throwable t) {
+				plugin.log.warning (t + ": Unable to spawn and trigger TNT at " + loc);
+			}						
+		}
 	}
 
 	
@@ -707,12 +725,14 @@ Chc	Max	average
 		// else damage blocks, no fire resistance, but check for nospread
 		} else if ( ifConfigContains ("nerf_fire.nospread", worldName)) {
 			event.setCancelled (true); // prevent any spread by default NMS code
+			//plugin.log.info ("burnt up block w/o spread " + event.getBlock().getType());
 			burnUpBlock (event.getBlock());
 			return;
 		}	
 		
 		// Keep processing event, which allows for spread, but check for drops
 		burnUpBlock (event.getBlock());
+		//plugin.log.info ("burnt up block " + event.getBlock().getType());
 	}	
 	
 	// Fire burns above, or if something is there, along the side of a block
@@ -1044,11 +1064,17 @@ Chc	Max	average
 	private boolean ifNerfCombustion (Entity burned, Entity burner) {
 		String worldName = burned.getLocation().getWorld().getName();
 
+		// New ProjectileSource makes this 1.7.2-R0.3 dependent
 		if (burner instanceof Projectile) {
-			Entity shooter = ((Projectile)burner).getShooter();
-			if (shooter != null) { // could be a Dispenser or such.
-				plugin.log.fine ("Determined " + shooter.getType() + " to have shot the " + burner.getType());
-				burner = shooter;
+			ProjectileSource shooter = ((Projectile)burner).getShooter();
+			if (shooter != null) { 
+				if (shooter instanceof LivingEntity) {
+					plugin.log.fine ("Determined " + ((LivingEntity)shooter).getType() + " to have shot the " + burner.getType());
+					burner = (Entity)shooter;
+				}
+				else
+					plugin.log.fine ("Determined " + shooter + " to have shot the " + burner.getType());
+	
 			}
 		}
 			
