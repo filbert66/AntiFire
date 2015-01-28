@@ -16,9 +16,14 @@
  *  12 Sep 2013 : PSW : Updated per latest Metrics API.
  *  23 Sep 2013 : PSW : Added commands for lava placement config
  *  15 Oct 2013 : PSW : Added commands for timed config modding.
+ *  20 May 2014 : PSW : TODO: add UUID log & transport command-line support. 
+ * 					  : Practically to support, use PlayerChatTabCompleteEvent() to complete UUIDs.
+ * 						complete names and UUIDs? Both are alphanumeric
+ *  07 Sep 2014 : PSW : Added language support. 
+ *  19 Dec 2014 : PSW : Unitialized logFile variables.
  */
  
- package com.yahoo.phil_work.antifire;
+package com.yahoo.phil_work.antifire;
 
 import java.util.Arrays;
 import java.util.ArrayList;
@@ -28,6 +33,7 @@ import java.util.HashMap;
 import java.util.Set;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.UUID;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -58,6 +64,8 @@ import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
 
 import org.mcstats.Metrics;
 
+import com.yahoo.phil_work.LanguageWrapper;
+
 import com.yahoo.phil_work.antifire.FireLogEntry;
 import com.yahoo.phil_work.antifire.AntifireLog;
 import com.yahoo.phil_work.BlockIdList;
@@ -74,31 +82,32 @@ import com.yahoo.phil_work.antifire.IgniteCause;
 public class AntiFire extends JavaPlugin {
 
     public Logger log;
-	public PluginDescriptionFile pdfFile;
+    LanguageWrapper language;
+	PluginDescriptionFile pdfFile;
 	private final AntiFireman antiFire = new AntiFireman (this);
 	private String Log_Level;
 	public AntifireLog fireLog;
 	private Map<CommandSender, Integer> Lastlog;  // for log "next" command
-	private File logFile; 
-	private BufferedWriter logFileWriter;
+	private File logFile = null; 
+	private BufferedWriter logFileWriter = null;
 	public String pluginName; // contains chat color controls
 	
 	// Metrics
 	private int blocksSaved = 0, entitiesSaved = 0;
 	private int logQueries = 0, teleports = 0, extinguishCommands = 0;
 
-	public void flushLog (CommandSender requestor) {
-		this.flushLog (requestor, 0);  // zero seconds from Now
+	public boolean flushLog (CommandSender requestor) {
+		return this.flushLog (requestor, 0);  // zero seconds from Now
 	}
 	
-    public void flushLog (CommandSender requestor, int secondsAge) {
+    public boolean flushLog (CommandSender requestor, int secondsAge) {
 		// Write fireLog to a file
 		long youngest = new Date().getTime() - (secondsAge * 1000); // anything younger won't get flushed
 		int logCount = 0;
 		
 		if (logFileWriter == null) {
 			log.warning ("Error flushing log. Restart server to reinitialize logfile");
-			return;
+			return false;
 		} 
 		try {
 			FireLogEntry l;
@@ -128,13 +137,14 @@ public class AntiFire extends JavaPlugin {
 					requestor.sendMessage (msg);
 			}
 		}
+		return true;
 	}
 	
 	public void onDisable() {
 		// Write fireLog to a file, and then close it.
 		try {
-			this.flushLog(null);
-			logFileWriter.close();
+			if (this.flushLog(null))
+				logFileWriter.close();
 		} catch (IOException ex) {
 			log.warning ("Error closing log " + logFile.getName() + ":" + ex.getMessage());
 
@@ -143,6 +153,8 @@ public class AntiFire extends JavaPlugin {
 		logFile = null;
 		fireLog = null;
 		Lastlog.clear();
+		
+		antiFire.clearTimedConfig ();
         
 		System.out.println(pdfFile.getName() + " disabled.");
     }
@@ -152,6 +164,29 @@ public class AntiFire extends JavaPlugin {
         	  (name.length() < 17 || (name.indexOf("_placed_lava") != -1 && name.length() < 29)) && 
         	  !name.matches("(?i).*[^a-z0-9_].*");
     }
+	private static UUID rID = UUID.randomUUID();
+	private static int lengthUUID = rID.toString().length();
+    public boolean validUUID (String s) {
+		log.info ("checking ID of length " + s.length() + "; expecting " + lengthUUID);
+		log.info ("ID pattern match: " + s.matches("(?i)(-[A-Za-z0-9])*"));
+		return s.length() == lengthUUID		 && 
+        	  !s.matches("(?i)(-[A-Za-z0-9])*");
+    }
+    public UUID getUUIDFromName (String playerName) {
+		UUID id;
+		
+		if ( !validUUID (playerName))
+			return null;
+		
+		try {
+			log.info ("Checking for UUID in " + playerName);
+			id = UUID.fromString (playerName);
+			log.info ("Found valid UUID " + id);
+		} catch (IllegalArgumentException e) {
+			id = null;
+		}
+    	return id;
+    }
 
     public void onEnable() {
         // Register our events
@@ -159,6 +194,7 @@ public class AntiFire extends JavaPlugin {
 
 		pdfFile = this.getDescription();
 		pluginName = ChatColor.DARK_RED + pdfFile.getName() + ChatColor.RESET;
+		language = new LanguageWrapper(this, "eng"); // English locale
 		log = this.getLogger();
 
 		if (logFile == null) 
@@ -275,19 +311,6 @@ public class AntiFire extends JavaPlugin {
         log.info ("enabled, brought to you by Filbert66"); 
     }
 
-/**
-    public String combineSplit(int startIndex, String[] string, String seperator) {
-        StringBuilder builder = new StringBuilder();
-
-        for (int i = startIndex; i < string.length; i++) {
-            builder.append(string[i]);
-            builder.append(seperator);
-        }
-        builder.deleteCharAt(builder.length() - seperator.length()); // remove
-        return builder.toString();
-    }
-**/
-
     void sendMsg (CommandSender requestor, String msg)
 	{
 		if (requestor == null)
@@ -307,7 +330,6 @@ public class AntiFire extends JavaPlugin {
         String commandName = command.getName().toLowerCase();
         String[] trimmedArgs = args;
 
-        // sender.sendMessage(ChatColor.GREEN + trimmedArgs[0]);
         if (commandName.equals("af")) {
             return afCommands(sender, trimmedArgs);
 		}
@@ -351,30 +373,41 @@ public class AntiFire extends JavaPlugin {
 			Lastlog.put (sender, next + 10);
 			return true;		
 		} else {
-			// Try to see if it's a player name
 			String p = args [0];
-			if ( !validName (p)) {
-				sendMsg (sender, ChatColor.RED + "bad player name '" + p + "'");
+
+			UUID id = getUUIDFromName (p); 
+			// Try to see if it's a player name
+			if (id == null && !validName (p)) {
+				sendMsg (sender, language.get (sender, "badName", ChatColor.RED + "bad player name '{0}'", p));
                 return true;
             } 
 
 			// Allow for lava suffix in player name
 			String pruned = p;
             int start_placed = p.indexOf ("_placed_lava");
-            if (start_placed != -1)
+            if (start_placed != -1) 
             	pruned = p.substring (0, start_placed);
 				
-            if ( !sender.getServer().getOfflinePlayer(pruned).hasPlayedBefore()) {
-				sender.sendMessage ("'" + pruned + "' has never played before");
+	        if ((id != null && !sender.getServer().getOfflinePlayer (id).hasPlayedBefore()) ||
+             	(id == null && !sender.getServer().getOfflinePlayer(pruned).hasPlayedBefore()) ) 
+            {
+				sendMsg (sender, language.get (sender, "unseenPlayer", "'{0}' has never played before", pruned));
 				return true;
 			}
 			boolean empty = true;
-			for (String s : fireLog.lastFewBy(10, p, colors)) {
-				empty = false;
-				sender.sendMessage (s);
+			if (id != null) {
+				for (String s : fireLog.lastFewBy(10, id, colors)) {
+					empty = false;
+					sender.sendMessage (s);
+				}
+			} else {				
+				for (String s : fireLog.lastFewBy(10, p, colors)) {
+					empty = false;
+					sender.sendMessage (s);
+				}
 			}
 			if (empty)
-				sender.sendMessage (pluginName + ": no entries in log by " + p);
+				sendMsg (sender, language.get (sender, "noLogBy", pluginName + ": no entries in log by {0}", p));
 			return true;
 		}
 	}
@@ -396,7 +429,7 @@ public class AntiFire extends JavaPlugin {
 				logEntry = null;
 			}
 			if (logEntry == null) {
-				sender.sendMessage (pluginName + ": no entries in log!");
+				sendMsg (sender, language.get (sender, "noLog", pluginName + ": no entries in log!"));
 				return true;
 			}
 		} else if (args [0].length() == 1 && Character.isDigit(args[0].charAt(0))) {
@@ -408,16 +441,20 @@ public class AntiFire extends JavaPlugin {
 			}
 		} else { // try to parse as a player name. BUG: Crash on multi-digit "name"
 			String n = args [0];
-			if ( !validName (n)) {
-				sendMsg (sender, ChatColor.RED + "bad player name '" + n + "'");
-                return true;
-            } else if ( !sender.getServer().getOfflinePlayer(n).hasPlayedBefore()) {
-				sender.sendMessage ("'" + n + "' has never played before");
+			UUID id = getUUIDFromName (n);
+			if (id == null && !validName (n)) {
+				sendMsg (sender, language.get (sender, "badName", ChatColor.RED + "bad player name '{0}'", n));
+				return true;
+			} 
+				
+            if ((id != null && !sender.getServer().getOfflinePlayer (id).hasPlayedBefore () ) ||
+            	(id == null && !sender.getServer().getOfflinePlayer(n).hasPlayedBefore()) ) {
+				sendMsg (sender, language.get (sender, "unseenPlayer", "'{0}' has never played before", n));
 				return true;
 			}
-			logEntry = fireLog.lastBy (n);
+			logEntry = (id != null ? fireLog.lastBy (id) : fireLog.lastBy (n));
 			if (logEntry == null) {
-				sender.sendMessage (pluginName + ": no entries in log for " + n);
+				sendMsg (sender, language.get (sender, "noLogBy", pluginName + ": no entries in log by {0}", n));
 				return true;
 			}			
 		}
@@ -454,9 +491,9 @@ public class AntiFire extends JavaPlugin {
 			boolean whitelist = this.getConfig().getBoolean ("nerf_fire.whitelist");
 			if (args.length == 1) { // no changes, just print
 				if (whitelist)
-					sender.sendMessage ("Blocks below are burnable:");
+					sender.sendMessage (language.get (sender, "burnList", "Blocks below are burnable:"));
 				else {
-					sender.sendMessage ("Blocks below are fireproof");
+					sender.sendMessage (language.get (sender, "proofList", "Blocks below are fireproof"));
 				}
 				antiFire.FireResistantList.printList (sender);
 			}
@@ -543,7 +580,7 @@ public class AntiFire extends JavaPlugin {
 							else
 								sendMsg (sender, ChatColor.YELLOW + "No delay configured for " + cause);
 						} else {
-							sendMsg (sender, ChatColor.RED + "invalid value for timed delay");
+							sendMsg (sender, language.get (sender, "invalid", ChatColor.RED + "invalid value for {0}", "timed delay"));
 							return false;
 						}
 					}	
@@ -613,7 +650,7 @@ public class AntiFire extends JavaPlugin {
 						sendMsg (sender, "Set " + ChatColor.BLUE + "nerf_fire.charcoaldrop.max" + ChatColor.RESET + " to " + max);
 						return true;
 					} catch (Exception exc) {
-						sender.sendMessage ("invalid value for charcoaldrop.max");
+						sendMsg (sender, language.get (sender, "invalid", ChatColor.RED + "invalid value for {0}", "charcoaldrop.max"));
 						return false;
 					}	
 				} else if (args[1].toLowerCase().equals ("random") || args[1].toLowerCase().equals ("fixed")) {
@@ -922,14 +959,12 @@ public class AntiFire extends JavaPlugin {
 			}
 		}
 
-		String message = "extinguished " + savedBlocks + " blocks and " + savedEntities + " entities within " + radius + " blocks of ";
+		String loc = l.toString();
 		if (sender != null && sender instanceof Player)	{
 		  if (l.equals (((Player)sender).getLocation())) 
-		     sender.sendMessage (pluginName + ": " + message + "you");
-		  else 
-		     sender.sendMessage (pluginName + " : " + message + l.toString());
-  		} else if (sender != null)
-		     sender.sendMessage (pdfFile.getName() + ": " + message + l.toString());
+		     loc = "you";
+  		} 
+		sendMsg (sender, language.get (sender, "extingRad", pluginName + ": " + "extinguished {0} blocks and {1} entities within {2} blocks of {3}", savedBlocks, savedEntities, radius, loc));
 		
 		this.entitiesSaved += savedEntities;
 		this.blocksSaved += savedBlocks;
@@ -947,7 +982,7 @@ public class AntiFire extends JavaPlugin {
 		boolean value = extinguishRadius (sender, center.getLocation(), radius);
 		
 		if (value)
-			center.sendMessage (pluginName + ": " + sender.getName() + " extinguished fire around you");
+			sendMsg (center, language.get (center, "otherExting", pluginName + ": {0} extinguished fire around you", sender.getName()));
 		
 		return value;
 	}
@@ -980,9 +1015,9 @@ public class AntiFire extends JavaPlugin {
 			}
 		}
 		//*DEBUG*/log.info ("Processed " + blocks + " blocks");
-		sender.sendMessage ( ((sender != null && sender instanceof Player) ? pluginName : pdfFile.getName()) + 
-						    ": extinguished " + savedBlocks + " blocks and " + savedEntities + " entities in " + 
-						    chunks + " chunks of " + w.getName());
+		sendMsg (sender, language.get (sender, "extingWorld", 
+									   pluginName + ": extinguished {0} blocks and {1} entities in {2} chunks of {3}",
+									   savedBlocks, savedEntities, chunks, w.getName() ));
 						    
 		this.entitiesSaved += savedEntities;
 		this.blocksSaved += savedBlocks;
@@ -1032,7 +1067,7 @@ public class AntiFire extends JavaPlugin {
 				if (w.getName().equals (args [1])) 
 					return extinguishWorld (sender, w);
 			}					
-			sendMsg (sender, "World '" + args[1] + "' not found.");
+			sendMsg (sender, language.get (sender, "noWorld", "World '{0}' not found.", args[1]));
 			return true;
 		}
 		else if (param.equals ("all")) {
@@ -1052,7 +1087,7 @@ public class AntiFire extends JavaPlugin {
 					logEntry = null;
 				}
 				if (logEntry == null) {
-					sender.sendMessage (pluginName + ": no entries in log!");
+					sendMsg (sender, language.get (sender, "noLog", pluginName + ": no entries in log!"));
 					return true;
 				}
 			} else if (args [1].length() == 1 && Character.isDigit(args[1].charAt(0))) {
@@ -1064,16 +1099,21 @@ public class AntiFire extends JavaPlugin {
 				}
 			} else { // try to parse as a player name. BUG: Crash on multi-digit "name"
 				String n = args [1];
-				if ( !validName (n)) {
-					sendMsg (sender, ChatColor.RED + "bad player name '" + n + "'");
+				UUID id = getUUIDFromName (n);
+				if (id == null && !validName (n)) {
+					sendMsg (sender, language.get (sender, "badName", ChatColor.RED + "bad player name '{0}'", n));
 					return true;
-				} else if ( !sender.getServer().getOfflinePlayer(n).hasPlayedBefore()) {
-					sender.sendMessage ("'" + n + "' has never played before");
+				} 
+				
+				if ((id != null && !sender.getServer().getOfflinePlayer (id).hasPlayedBefore () ) ||
+					(id == null && !sender.getServer().getOfflinePlayer(n).hasPlayedBefore()) )
+				{   // n is string version so works if it's a UUID too
+					sendMsg (sender, language.get (sender, "unseenPlayer", "'{0}' has never played before", n));
 					return true;
 				}
-				logEntry = fireLog.lastBy (n);
+				logEntry = (id != null ? fireLog.lastBy (id) : fireLog.lastBy (n));
 				if (logEntry == null) {
-					sender.sendMessage (pluginName + ": no entries in log for " + n);
+					sendMsg (sender, language.get (sender, "noLogBy", pluginName + ": no entries in log by {0}", n));
 					return true;
 				}			
 			}
@@ -1082,9 +1122,10 @@ public class AntiFire extends JavaPlugin {
 		}	
 		else if (validName (args[0])) {
 			// extinguish around supplied player
+			// don't bother with UUID because this is for a player currently online
 			Player p = getServer().getPlayer(args[0]);
 			if (p == null) {
-				sender.sendMessage ("Cannot find player '" + args[0] + "' online");
+				sendMsg (sender, language.get (sender, "notOnline", "Cannot find player '{0}' online", args[0]));
 				return true;
 			}
 			return extinguishRadius (sender, p, radius);
@@ -1097,13 +1138,13 @@ public class AntiFire extends JavaPlugin {
 			radius = Integer.parseInt (args [0]);
 
 			if (radius < 0) {
-				sender.sendMessage ("negatives are invalid for radius");
+				sendMsg (sender, language.get (sender, "invalid", ChatColor.RED + "invalid value for {0}", "radius"));
 				return false;
 			}
 			return extinguishRadius ((Player)sender, radius);
 		
 		} catch (Exception exc) {
-			sender.sendMessage ("invalid value for radius");
+			sendMsg (sender, language.get (sender, "invalid", ChatColor.RED + "invalid value for {0}", "radius"));
 			return false;
 		}	
 	}	

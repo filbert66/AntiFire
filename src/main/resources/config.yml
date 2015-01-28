@@ -35,6 +35,12 @@ nerf_fire:
 #      fromlava: world, nether
 #      fromfire:
 #        - world
+#    drops:
+#    mob: 
+#    peacefulmob:
+#    hostilemob:
+#    painting: false
+#    item: is equivalent to 'nonplayer'
 #    nonplayer:
 #      fromlava: nether, world_the_end, world
 #      fromfire: world

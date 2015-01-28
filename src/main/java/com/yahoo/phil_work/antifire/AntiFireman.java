@@ -31,6 +31,9 @@
  * 16 Jan 2013 : PSW : Recognize LOG_2 Material type for new logs; added anydropchance for all charcoal
  * 09 Mar 2014 : PSW : Fixed TNT not triggering when "burnt up";
  *                     New in 1.7.2-R0.3 ProjectileSource
+ *    May 2014 : PSW : Use new UUID firelog calls.
+ * 18 Dec 2014 : PSW : Expand .nonplayer to hostilemob, peacefulmob, mob, drops, painting, item
+ * 21 Jan 2015 : PSW : avoid NPE on restart with timedMgr.
  */
 
  package com.yahoo.phil_work.antifire;
@@ -46,6 +49,7 @@ import java.util.logging.Level;
 import java.lang.Character;
 import java.lang.Class;
 import java.util.NoSuchElementException;
+import java.util.UUID;
  
 import org.bukkit.event.entity.EntityCombustEvent; // when a player/entity is burnt by fire
 import org.bukkit.event.entity.EntityCombustByBlockEvent; // entity burnt by lava or burning block
@@ -73,6 +77,7 @@ import org.bukkit.CoalType;
 import org.bukkit.Effect;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
+import org.bukkit.entity.Hanging;
 import org.bukkit.entity.Projectile;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.HumanEntity;
@@ -92,6 +97,7 @@ import org.bukkit.Bukkit;
 import com.yahoo.phil_work.BlockId;
 import com.yahoo.phil_work.BlockIdList;
 import com.yahoo.phil_work.MaterialDataStringer;
+import com.yahoo.phil_work.EntityClassifier;
 import com.yahoo.phil_work.antifire.FireLogEntry;
 import com.yahoo.phil_work.antifire.AntifireLog;
 import com.yahoo.phil_work.antifire.IgniteCause;
@@ -156,10 +162,22 @@ public class AntiFireman implements Listener
 		
 		plugin.getConfig().getStringList ("nerf_fire.nodamageto.block"); 
 		
-		plugin.getConfig().getStringList ("nerf_fire.nodamageto.player.fromlava");		
+		plugin.getConfig().getStringList ("nerf_fire.nodamageto.player.fromlava");	
 		plugin.getConfig().getStringList ("nerf_fire.nodamageto.player.fromfire");
-		plugin.getConfig().getStringList ("nerf_fire.nodamageto.nonplayer.fromlava");		// Break out to mob, item, painting, player, drops
-		plugin.getConfig().getStringList ("nerf_fire.nodamageto.nonplayer.fromfire");
+	
+		plugin.getConfig().getStringList ("nerf_fire.nodamageto.hostilemob.fromfire");
+		plugin.getConfig().getStringList ("nerf_fire.nodamageto.peacefulmob.fromfire");
+		plugin.getConfig().getStringList ("nerf_fire.nodamageto.mob.fromfire"); // prob not used, but in case
+		plugin.getConfig().getStringList ("nerf_fire.nodamageto.drops.fromfire");
+		plugin.getConfig().getStringList ("nerf_fire.nodamageto.painting.fromfire");
+		plugin.getConfig().getStringList ("nerf_fire.nodamageto.item.fromfire");
+
+		plugin.getConfig().getStringList ("nerf_fire.nodamageto.hostilemob.fromlava");
+		plugin.getConfig().getStringList ("nerf_fire.nodamageto.peacefulmob.fromlava");
+		plugin.getConfig().getStringList ("nerf_fire.nodamageto.mob.fromlava");
+		plugin.getConfig().getStringList ("nerf_fire.nodamageto.drops.fromlava");
+		plugin.getConfig().getStringList ("nerf_fire.nodamageto.painting.fromlava");
+		plugin.getConfig().getStringList ("nerf_fire.nodamageto.item.fromlava");
 
 		plugin.getConfig().getStringList ("nerf_fire.nospread"); // by adjacent fire
 		plugin.getConfig().getStringList ("nerf_fire.wooddropscharcoal"); 
@@ -207,10 +225,15 @@ public class AntiFireman implements Listener
 		if (cause == null)
 			return false;
 			
-		if (timedMgr == null && delay > 0) {
+		if (timedMgr == null) {
 			createTimedMgr();
+			plugin.log.info ("Late-starting timed fire manager");
+			timedMgr.initConfig();
 		}
-		return timedMgr.setConfig (cause, delay);
+		if (delay > 0)
+			return timedMgr.setConfig (cause, delay);
+		else 
+			return false;
 	}
 	
 	private void printMsg (CommandSender requestor, String msg)
@@ -323,6 +346,12 @@ public class AntiFireman implements Listener
 	 */
 	public boolean ifConfigContains (String configkey, String pattern) 
 	{		
+		if (!plugin.getConfig().isSet (configkey) && configkey.contains ("nodamageto") && !configkey.contains (".player")) {
+			plugin.log.fine (configkey + " not set; changing to nonplayer");
+			int l= configkey.length();
+			configkey = "nerf_fire.nodamageto.nonplayer.from" + configkey.substring (l-4, l); //"lava" or "fire"
+		}
+			
 		if (plugin.getConfig().isString(configkey)) {
 			String configVal = plugin.getConfig().getString(configkey);
 			// Can't just call .contains() since world_the_end contains 'world'
@@ -471,9 +500,14 @@ public class AntiFireman implements Listener
 			
 			if (shouldLog)
 			{
-				String starter = (p != null ? p.getDisplayName() : event.getCause().toString());
+				String starter = event.getCause().toString();
+				UUID starterId = null;
+				if (p != null) {
+					starterId = p.getUniqueId();
+					starter = p.getDisplayName();
+				}
 				
-				if (plugin.fireLog.add (starter, loc) > 10) // don't flush to disk until we get 10 events
+				if (plugin.fireLog.add (starter, starterId, loc) > 10) // don't flush to disk until we get 10 events
 				{
 					plugin.flushLog (null, plugin.getConfig().getInt ("nerf_fire.logflushsecs"));
 				}
@@ -787,26 +821,41 @@ Chc	Max	average
 		return null;
 	}
 	
+	private String getConfigSubString (Entity e) {
+		EntityType et = e.getType();
+		String configItem;
+
+		if (e instanceof Player) {
+			configItem = "player";
+		} else if (e instanceof LivingEntity) {
+			if (EntityClassifier.canBeHostile (e))
+				configItem = "hostilemob";
+			else if (EntityClassifier.isPeaceful (e))
+				configItem = "peacefulmob";
+			else {
+				configItem = "mob";
+				plugin.log.finer (et + " neither peaceful nor hostile");
+			}
+		} else if (et == EntityType.DROPPED_ITEM)
+			configItem = "drops";
+		else if (e instanceof Hanging)
+			configItem = "painting";
+		else 
+			configItem = "item";
+			
+		return configItem;
+	}
+	
 	@EventHandler (ignoreCancelled = true)
 	public void onEntityCombust (EntityCombustEvent event) {
 		Entity e = event.getEntity();
 		String worldName = e.getLocation().getWorld().getName();
-
-		if (e instanceof Player) {
-			Player p = (Player)e;
-			// Presume it's a burning block; don't know how to check if a block is on fire.
-			if (ifConfigContains ("nerf_fire.nodamageto.player.fromfire", worldName)) {
-				plugin.log.fine ("stopped combustion to player " + p.getDisplayName());
-				event.setDuration (0);  // on fire for zero
-				event.setCancelled (true);
-			}
-		} else { // Catches mobs from catching fire from sunlight!!
-			// Presume it's a burning block; don't know how to check if a block is on fire.
-			if (ifConfigContains ("nerf_fire.nodamageto.nonplayer.fromfire", worldName)) {
-				plugin.log.fine ("stopped combustion to " + e.getType() );
-				event.setDuration (0);
-				event.setCancelled (true);
-			}
+		String configItem = "nerf_fire.nodamageto." + getConfigSubString (e) + ".fromfire";
+		
+		if (ifConfigContains (configItem, worldName)) {
+			plugin.log.fine ("stopped combustion to " + (e instanceof Player ? ((Player)e).getDisplayName() : e.getType()));
+			event.setDuration (0);
+			event.setCancelled (true);
 		}
 	}
 	/*
@@ -823,29 +872,17 @@ Chc	Max	average
 			onEntityCombust ((EntityCombustEvent) event);
 			return;
 		}
-		
-		plugin.log.fine ("Entity " + e.getType() + " combust by " + burner.getType());
-		
-		if (e instanceof Player) {
-			Player p = (Player)e;
-			// Checked NMS movement code. Lava burning sets source to null!
-			if (burner.getType() == Material.LAVA &&
-				ifConfigContains ("nerf_fire.nodamageto.player.fromlava", worldName) ) {
-				plugin.log.fine ("stopped combust to player " + p.getDisplayName() + " from lava in " + worldName);
-				event.setDuration (0);
-				event.setCancelled (true);
-				return;
-			}
+		else if (burner.getType() == Material.LAVA) {
+			String configItem = "nerf_fire.nodamageto." + getConfigSubString (e) + ".fromlava";
+			String name = (e instanceof Player ? ((Player)e).getDisplayName() : e.getType().toString());
 			
-		} else {
-			if (burner.getType() == Material.LAVA &&
-				ifConfigContains ("nerf_fire.nodamageto.nonplayer.fromlava", worldName) ) {
-				plugin.log.fine ("stopped combust to " + e.getType() + " from lava in " + worldName);
+			if (ifConfigContains (configItem, worldName)) {
+				plugin.log.fine ("stopped combust to " + name + " from lava in " + worldName);
 				event.setDuration (0);
 				event.setCancelled (true);
-				return;
 			}
-		}		
+		} else
+			plugin.log.fine ("Entity " + e.getType() + " combust by " + burner.getType());
 	}	
 	
 	// EntityblockEvent: Handles Lighting ignition source
@@ -866,17 +903,12 @@ Chc	Max	average
 		//  May need new Permission to allow Players to set Entities on fire
 				
 		plugin.log.fine ("Entity " + burned.getType() + " combust by " + burner.getType()); // move after check below
+
 		if (burner.getType() == EntityType.LIGHTNING) {			
-			if (burned instanceof Player) {
-				if (ifConfigContains ("nerf_fire.nodamageto.player.fromlightning", worldName) ) {
-					stopEvent = true;
-				}
-			
-			} else {
-				if (ifConfigContains ("nerf_fire.nodamageto.nonplayer.fromlightning", worldName) ) {
-					stopEvent = true;
-				}
-			}	
+			String configItem = "nerf_fire.nodamageto." + getConfigSubString (burned) + ".fromlightning";
+		
+			if (ifConfigContains (configItem, worldName))
+				stopEvent = true;
 		}		
 		else 
 		{
@@ -942,6 +974,8 @@ Chc	Max	average
 			event.setDamage (0); // just to make sure
 			event.setCancelled (true);
 		}
+		else 
+			plugin.log.finer ("Allowing " + damagee.getType() + " to be damaged by " + damager + ", cause "+ event.getCause());
 	}
 		
 	/* 
@@ -958,21 +992,18 @@ Chc	Max	average
 		String worldName = damagee.getLocation().getWorld().getName();
 		boolean makeLog = true;
 		boolean nerfdamage = false;
+		String configItem = "nerf_fire.nodamageto." + getConfigSubString (damagee);
 		
 	    switch (event.getCause()) {
 		    case LAVA:
-				nerfdamage = (damagee instanceof Player) ? 
-				    ifConfigContains ("nerf_fire.nodamageto.player.fromlava", worldName) :
-					ifConfigContains ("nerf_fire.nodamageto.nonplayer.fromlava", worldName) ;
+				nerfdamage = ifConfigContains (configItem + ".fromlava", worldName);
 				break;
 
 			case FIRE_TICK: // this gets called from EntityDamageEvent (not ByBlock)
 				plugin.log.finest (damagee.getType() + " damaged by fire tick");
 				makeLog = false;
 			case FIRE:
-				nerfdamage =  (damagee instanceof Player) ? 
-					ifConfigContains ("nerf_fire.nodamageto.player.fromfire", worldName) :
-					ifConfigContains ("nerf_fire.nodamageto.nonplayer.fromfire", worldName) ;
+				nerfdamage = ifConfigContains (configItem + ".fromfire", worldName);
 				break;
 
 			default:
@@ -988,7 +1019,8 @@ Chc	Max	average
 
 			event.setDamage (0); // just to make sure
 			event.setCancelled (true);
-		}
+		} else 
+			plugin.log.finer ("Allowing " + damagee.getType() + " to be damaged by cause "+ event.getCause());
 		
 		// if (makeLog) plugin.log.finer ("nerf_fire: caught " + event.getCause() + " damaging " + damagee.getType());
 	}
@@ -1046,7 +1078,7 @@ Chc	Max	average
 			}
 			else if (shouldLog) {
 				String logEvent = p.getDisplayName() + "_placed_lava";
-				if (plugin.fireLog.add (logEvent, loc) > 10) // don't flush to disk until we get 10 events
+				if (plugin.fireLog.add (logEvent, p.getUniqueId(), loc) > 10) // don't flush to disk until we get 10 events
 				{
 					plugin.flushLog (null, plugin.getConfig().getInt ("nerf_fire.logflushsecs"));
 				}
@@ -1126,7 +1158,7 @@ Chc	Max	average
 				p.sendMessage (plugin.pluginName + " says you don't have permissions to burn mobs");
 				return true;
 			}
-			else if (ifConfigContains ("nerf_fire.nodamageto.nonplayer.fromfire", worldName) ) 
+			else if (ifConfigContains ("nerf_fire.nodamageto." + getConfigSubString (burned) + ".fromfire", worldName) ) 
 				return true;
 		}
 		else { // Burning mob by mob

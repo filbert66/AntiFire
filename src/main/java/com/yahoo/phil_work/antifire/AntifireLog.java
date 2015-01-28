@@ -1,6 +1,7 @@
 /* 
  * History:
  *   21 Aug 2012 : PSW: Added return value from add()
+ *   20 May 2014 : PSW : Added UUID support (Bukkit 1.7.9)
  */
 
 package com.yahoo.phil_work.antifire;
@@ -12,6 +13,7 @@ import java.util.LinkedList;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.Date;
+import java.util.UUID;
 import java.text.SimpleDateFormat;
 import java.text.DateFormat;
 import java.util.NoSuchElementException;
@@ -38,24 +40,35 @@ public class AntifireLog {
 		list = new LinkedList <FireLogEntry>();
 	}		
 
-	public int add (String player, Location loc) {
-		FireLogEntry entry = new FireLogEntry (player, new Date(), loc)	;
+	public int add (String player, UUID playerId, Location loc) {
+		FireLogEntry entry = new FireLogEntry (player, new Date(), loc, playerId);
 		list.addLast (entry);
 		return list.size();
 	}
     public int add (Player starter, Location loc) {
-		return this.add (starter.getName(), loc);
+		return this.add (starter.getName(), starter.getUniqueId(), loc);
 	}	
 
+	// Now checks UUID first; if not that, returns true if just name matches
     public boolean contains (OfflinePlayer p) {
 		String name = p.getName();
+		UUID id = p.getUniqueId();
 		
-		return this.contains (name);
+		if (this.contains (id)) 
+			return true;
+		else
+			return this.contains (name);
 	}
 
     public boolean contains (String name) {		
 		for (FireLogEntry l : list)
 			if (l.playerName.equalsIgnoreCase (name))
+				return true;
+		return false;
+	}
+    public boolean contains (UUID id) {		
+		for (FireLogEntry l : list)
+			if (l.playerId.equals (id))
 				return true;
 		return false;
 	}
@@ -72,10 +85,27 @@ public class AntifireLog {
 		}
 		return null;
 	}
+	public FireLogEntry lastBy (UUID id) {
+		Iterator<FireLogEntry> reverseIterator = list.descendingIterator ();
+		FireLogEntry l;
+		
+		while (reverseIterator.hasNext()) {
+			l = reverseIterator.next();
+			if (l.playerId.equals (id))
+				return l;
+		}
+		return null;
+	}
+	// Now checks UUID first; if not that, finds just name matches
 	public FireLogEntry lastBy (OfflinePlayer p) {
 		String name = p.getName();
+		UUID id = p.getUniqueId();
+		FireLogEntry e = lastBy (id);
 		
-		return this.lastBy (name);
+		if (e != null) 
+			return e;
+		else		
+			return this.lastBy (name);
 	}
 
 	// For the command to find the last minus Nth entry	
@@ -149,6 +179,52 @@ public class AntifireLog {
 		}
 		return entries;
 	}
-	
+	public ArrayList <String> lastFewBy (int number, UUID playerId, boolean colors) {
+		ArrayList<String> entries = new ArrayList <String>();
+		Iterator<FireLogEntry> reverseIterator = list.descendingIterator ();
+		int maxcount = number;
+		
+		try {
+			FireLogEntry l;
+			
+			while (reverseIterator.hasNext() && maxcount > 0) {				
+				l = reverseIterator.next();
 
+				if (l.playerId.equals (playerId)) {
+					entries.add (l.toString(colors));
+					maxcount--;
+				}
+			}
+		}
+		catch (NoSuchElementException exc) {
+			entries.add ("END of LOG");
+		}
+		return entries;
+	}
+	
+	// returns all names beginning with that prefix that are in the log
+	public ArrayList <String> findNames (String prefix) {
+		ArrayList<String> entries = new ArrayList <String>();
+		for (FireLogEntry l : list)
+			if (l.playerName.startsWith (prefix))
+				entries.add (l.playerName);		
+		return entries;
+	}
+	
+	// returns all UUIDs beginning with that prefix that are in the log
+	public ArrayList <String> findIds (String prefix) {
+		prefix = prefix.toLowerCase();
+		ArrayList<String> entries = new ArrayList <String>();
+		for (FireLogEntry l : list)
+			if (l.playerId.toString().toLowerCase().startsWith (prefix))
+				entries.add (l.playerId.toString());		
+		return entries;
+	}	
+
+	// returns all names & UUIDs beginning with that prefix that are in the log
+	public ArrayList <String> findStarters (String prefix) {
+		ArrayList<String> result = findIds (prefix);
+		result.addAll (findNames (prefix));
+		return result;
+	}
 }

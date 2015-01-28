@@ -175,6 +175,8 @@ class TimedExtinguisher extends	BukkitRunnable {
 		}
 	    if ( !FixedLengthBlocks.isEmpty()) try {
 			long delay = millisecsToTicks (nextOut - now);
+			if (delay == 0) delay++;	// ensure longer wait
+			
 			myTask = plugin.getServer().getScheduler().runTaskLater (this.plugin, this, delay);  
 			plugin.getLogger().fine ("Rescheduled extinguish in " + world.getName() + " in " + delay + " ticks");
 		} catch (IllegalArgumentException e) {
