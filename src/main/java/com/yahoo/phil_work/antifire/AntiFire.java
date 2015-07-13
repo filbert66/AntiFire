@@ -21,6 +21,7 @@
  * 						complete names and UUIDs? Both are alphanumeric
  *  07 Sep 2014 : PSW : Added language support. 
  *  19 Dec 2014 : PSW : Unitialized logFile variables.
+ *  12 Jul 2015 : PSW : Added command support for variable timed range.
  */
  
 package com.yahoo.phil_work.antifire;
@@ -538,14 +539,23 @@ public class AntiFire extends JavaPlugin {
 		}
 		else if (commandName.equals("timed")) {
 			final String TimedName = "nerf_fire.timedcauses";
+			final String netherName = "nerf_fire.timeNetherackToo";
 			
-			if (args.length == 1) 
+			if (args.length == 1) {
 				antiFire.printConfig (sender, TimedName);
-			else {
+				antiFire.printConfigKey (sender, netherName);
+			} else {
 				String key = args[1];
 				IgniteCause cause = IgniteCause.matchIgniteCause (key);
 				if (cause == null) {
-					if ( !key.equals ("clear")) {
+					if (key.equals ("netherack")) {
+						if (args.length == 3) {
+							this.getConfig().set (netherName, args[2].equalsIgnoreCase ("true"));
+							sender.sendMessage ("Set " + netherName + " to " + getConfig().getBoolean (netherName));
+						} else 
+							antiFire.printConfigKey (sender, netherName);
+						return true;
+					} else if ( !key.equals ("clear")) {
 						sendMsg (sender, ChatColor.RED + "Unknown ignite cause '" + ChatColor.RESET + key + "'");
 						return false;					
 					}
@@ -563,27 +573,24 @@ public class AntiFire extends JavaPlugin {
 					else 
 						sendMsg (sender, key + ChatColor.YELLOW + " is not a currently configured timed cause.");
 				} else { // want to set one value
-					try { 
-						long delay = Long.parseLong (args[2]);	
+					if (args[2].equals ("clear")) { 
+						if (antiFire.clearTimedConfig (cause))
+							sender.sendMessage ("Removed delay for fire cause " + cause);
+						else
+							sendMsg (sender, ChatColor.YELLOW + "No delay configured for " + cause);
+					} else try { 
+						String[] cutArgs = Arrays.copyOfRange (args, 2, args.length);
+						String delay = Arrays.toString(cutArgs).replaceAll (", ", " ");
+						delay = delay.substring (1, delay.length()-1); // remove leading/trailing ']'
 						boolean result = antiFire.setTimedConfig (cause, delay);
 						if ( !result)
 							sendMsg (sender, ChatColor.YELLOW + "Unable to set " + cause + " to " + delay + " delay");
-						else if (delay > 0)
-							sender.sendMessage ("Set delay of " + delay + "ms for fire cause of " + cause);
 						else 
-							sender.sendMessage ("Removed any delay for fire cause " + cause);
-						
+							sender.sendMessage ("Set delay of " + delay + "ms for fire cause of " + cause);
 					} catch (Exception exc) {
-						if (args[2].equals ("clear")) {
-							if (antiFire.clearTimedConfig (cause))
-								sender.sendMessage ("Removed delay for fire cause " + cause);
-							else
-								sendMsg (sender, ChatColor.YELLOW + "No delay configured for " + cause);
-						} else {
-							sendMsg (sender, language.get (sender, "invalid", ChatColor.RED + "invalid value for {0}", "timed delay"));
-							return false;
-						}
-					}	
+						sendMsg (sender, language.get (sender, "invalid", ChatColor.RED + "invalid value for {0}", "timed delay"));
+						return false;
+					}
 				}
 			}
 			return true;

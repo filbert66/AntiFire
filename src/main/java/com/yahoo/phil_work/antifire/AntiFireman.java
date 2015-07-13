@@ -220,6 +220,17 @@ public class AntiFireman implements Listener
 		}
 		return false;
 	}
+	public boolean setTimedConfig (IgniteCause cause, String delay) {
+		if (cause == null)
+			return false;
+			
+		if (timedMgr == null) {
+			createTimedMgr();
+			plugin.log.info ("Late-starting timed fire manager");
+			timedMgr.initConfig();
+		}
+		return timedMgr.setConfig (cause, delay);
+	}
 	public boolean setTimedConfig (IgniteCause cause, long delay) 
 	{
 		if (cause == null)
@@ -495,7 +506,7 @@ public class AntiFireman implements Listener
 
 			// Call TimedBlock here.
 			if (timedMgr != null && 
-				timedMgr.ifTimedDelayFor (detailedCause) && !burnsForever (block)) 
+				timedMgr.ifTimedDelayFor (detailedCause) && (!burnsForever (block) || timedMgr.foreverBlocksToo()) ) 
 				timedMgr.setTimedDelay (detailedCause, event.getBlock().getState());
 			
 			if (shouldLog)

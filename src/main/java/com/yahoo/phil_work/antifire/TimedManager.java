@@ -1,3 +1,5 @@
+// implemented addRandom with range of times
+
 package com.yahoo.phil_work.antifire;
 
 import java.util.HashMap;
@@ -20,8 +22,64 @@ import com.yahoo.phil_work.antifire.IgniteCause;
 
 class TimedManager implements Listener { 
 
+	 private class TimedLength {
+		boolean ifRandom;
+		long min;
+		long max;
+		
+		TimedLength (long fixed)
+		{
+			ifRandom = false;
+			min = max = fixed;
+		}
+		
+		TimedLength (long Min, long Max) {
+			ifRandom = true;
+			min = Min;
+			max = Max;
+		} 
+
+		TimedLength (String Min, String Max) {
+			if (plugin != null)
+				plugin.getLogger().fine ("TimedLength parsed to '" + Min + "', '" + Max + "'");
+//			else 
+//				System.out.println  ("TimedLength parsed to '" + Min + "', '" + Max + "'");
+			try {
+				min = max = Long.parseLong (Min);
+			} catch (NumberFormatException ex) {}
+			ifRandom = false;
+			
+			if (Max.length() > 0) {
+				try {
+					max = Long.parseLong (Max);
+				} catch (NumberFormatException ex) {}
+				ifRandom = true;
+			}
+			else 
+				ifRandom = false;
+		}
+		TimedLength (String[] init) {
+			this (init[0], init.length > 1 ? init [1] : "");
+			
+			if (init[0].length() == 0) { // negatives get split at start 
+				ifRandom = false;
+				min = -max;
+				max = min;
+			}
+		}		
+		TimedLength (String init) {
+			this (init.trim().split ("\\s*-\\s*", 2));
+		}
+		
+		@Override public String toString() {
+			if (ifRandom) 
+				return Long.toString(min) + " - " + Long.toString(max);
+			else
+				return Long.toString(min);
+		}
+	}	
 	private HashMap <String, TimedExtinguisher> WorldTimed = new HashMap (8);
-	private HashMap <IgniteCause, Long> TimedCause = new HashMap ();
+	private HashMap <IgniteCause, TimedLength> TimedCause = new HashMap ();
 	private Plugin plugin;
 
 	TimedManager (Plugin p) {
@@ -33,6 +91,9 @@ class TimedManager implements Listener {
 				WorldTimed.put (w.getName(), te);
 		}
 	}
+	TimedManager () {
+		this.plugin = null;
+	}
 
 	public void initConfig() {
 		ConfigurationSection conf = plugin.getConfig().getConfigurationSection ("nerf_fire.timedcauses");
@@ -40,25 +101,29 @@ class TimedManager implements Listener {
 			return;
 		}	
 		for (String k : conf.getKeys (false)) {
-			long del = conf.getLong (k);
-			TimedFireCauses tc = new TimedFireCauses (k, del);
+			TimedLength tl = new TimedLength (conf.getString (k)); // parses string either way
+
+			TimedFireCauses tc = new TimedFireCauses (k, tl); 
 			if (tc.Cause == null) {
 				plugin.getLogger().warning ("Unrecognized ignite cause: '" + k + "'. Refer to http://bit.ly/1gsdblo");
 				conf.set (k, null); // removes from memory
 			}
 			else {
-				TimedCause.put (tc.Cause, tc.BurnMillisecs);
+				TimedCause.put (tc.Cause, tl);
 			
-				plugin.getLogger().config ("Added timed fire of delay " + del + " ticks for " + tc.Cause);
+				plugin.getLogger().config ("Added timed fire of delay " + tl.toString() + " ticks for " + tc.Cause);
 				
 				// normalize RAM config, for easy finding on modification by commands
 				if ( !k.equals (tc.Cause.toString())) {
-					conf.set (tc.Cause.toString(), tc.BurnMillisecs); // add canonical name
+					conf.set (tc.Cause.toString(), tc.Time.toString()); // add canonical name
 					conf.set (k, null);	// remove alt name
 				}
 			}
 		}
 	}		
+	public boolean foreverBlocksToo () {
+		return plugin.getConfig().getBoolean ("nerf_fire.timeNetherackToo");
+	}
 
 	/*
 	 * These config functions all deal in user-consummable millisecond delays
@@ -71,12 +136,21 @@ class TimedManager implements Listener {
 	public boolean setConfig (String cause, long millisecs) {
 		return setConfig (IgniteCause.matchIgniteCause (cause), millisecs);
 	}
+	public boolean setConfig (IgniteCause cause, String delaySpec) {
+		TimedLength tl = new TimedLength (delaySpec);
+		
+		return setConfig (cause, tl);
+	}
 	public boolean setConfig (IgniteCause cause, long millisecs) {
+		TimedLength tl = new TimedLength (millisecs);
+		return setConfig (cause, tl);
+	}
+	public boolean setConfig (IgniteCause cause, TimedLength tl) {
 		ConfigurationSection conf = plugin.getConfig().getConfigurationSection ("nerf_fire.timedcauses");
 
 		if (cause == null)
 			return false;
-		else if (millisecs < 0) {
+		else if (tl.min < 0) {
 			if (ifTimedDelayFor (cause)) {
 				plugin.getLogger().config ("Removing any timed fire for cause " + cause);
 				TimedCause.remove (cause);
@@ -88,17 +162,17 @@ class TimedManager implements Listener {
 			}
 			return true;
 		}
-		else if (millisecs < 1000L/20) { //invalid delay
+		else if (tl.min < 1000L/20 || tl.max < 1000L/20) { //invalid delay
 			return false;
 		}
-		TimedCause.put (cause, millisecs);
+		TimedCause.put (cause, tl);
 		
 		// Now set config in RAM
 		if (conf == null) {
 			conf = plugin.getConfig().createSection ("nerf_fire.timedcauses");
 			plugin.getLogger().config ("Creating first timedcauses config item for " + cause);
 		}	
-		conf.set (cause.toString(), millisecs); 
+		conf.set (cause.toString(), tl.toString()); 
 		return true;
 	}
 	public boolean clearConfig (IgniteCause cause) {
@@ -108,40 +182,61 @@ class TimedManager implements Listener {
 		for (IgniteCause c : IgniteCause.values())
 			clearConfig (c);
 	}
-	public long getConfig (IgniteCause cause) {
+/**	public long getConfig (IgniteCause cause) {
 		if (! ifTimedDelayFor (cause))
 			return -1;
 		
 		return TimedCause.get (cause);
 	}
+	**/
+	/**
 	public long getConfig (String cause) {
 		return getConfig (IgniteCause.matchIgniteCause (cause));
 	}
+	**/
 	
 	// Class for parsing configuration strings
 	class TimedFireCauses {	
 		TimedFireCauses (IgniteCause c, long d) {
 			Cause = c;
-			BurnMillisecs = d;
+			Time = new TimedLength (d);
+		}
+		TimedFireCauses (IgniteCause c, TimedLength tl) {
+			Cause = c;
+			Time = tl;
+		}
+		TimedFireCauses (String cuz, TimedLength tl) {
+			this (cuz, 0);
+			Time = tl;
 		}
 		TimedFireCauses (String c, long d) {
 			this (IgniteCause.matchIgniteCause(c), d);
 		}
-		TimedFireCauses (String cuz, String del) {
+		TimedFireCauses (String cuz, String delay) {
 			this (cuz, 0);
-			try {
-				BurnMillisecs = Long.parseLong (del);
-			} catch (NumberFormatException ex) {}
-		}
-		TimedFireCauses (String[] init) {
+			Time = new TimedLength (delay);
+		}		
+/**		TimedFireCauses (String[] init) {
 			this (init [0], init [1]);
 		}		
 		TimedFireCauses (String init) {
 			this (init.split (" |,", 2));
 		}
-		
+**/
+		boolean isRandom() {
+			return Time.ifRandom;
+		}
+		long getTime() {
+			return Time.min;
+		}
+		long getMin() {
+			return getTime();
+		}
+		long getMax() {
+			return Time.max;
+		}
 		IgniteCause Cause;
-		long BurnMillisecs;
+		TimedLength Time;
 	}
 	
 	public boolean ifTimedDelayFor (IgniteCause cause) {
@@ -150,8 +245,7 @@ class TimedManager implements Listener {
 	
 	public void setTimedDelay (IgniteCause cause, BlockState state) {
 		if (ifTimedDelayFor (cause)) {
-			long fireDelay = TimedCause.get (cause); // in millisecs
-			fireDelay = fireDelay * 20L / 1000L;
+			TimedLength fireDelay = TimedCause.get (cause); // in millisecs
 			this.add (state, fireDelay); // 20 ticks per 1000ms
 		}
 	}	
@@ -178,6 +272,26 @@ class TimedManager implements Listener {
 			te.add (state, delay);
 			plugin.getLogger().finer ("Added " + delay + " ticks delayed extinguish at " + state.getLocation());
 		}
+	}
+	public void add (BlockState s, long min, long max) {
+		addRandom (s, min, max);
+	}
+	public void addRandom (BlockState state, long min, long max) {
+		World w = state.getLocation().getWorld();
+		TimedExtinguisher te = WorldTimed.get (w.getName());
+		if (te != null) {
+			te.addRandom (state, min, max);
+			plugin.getLogger().finer ("Added random [" + min + ", " + max + "] ticks delayed extinguish at " + state.getLocation());
+		}
+	}
+	// Does conversion to ticks before adding
+	public void add (BlockState state, TimedLength tl) {
+		long Min = TimedExtinguisher.millisecsToTicks (tl.min);
+
+		if (tl.ifRandom) 
+			addRandom (state, Min, TimedExtinguisher.millisecsToTicks (tl.max));
+		else
+			add (state, Min);
 	}
 	
 	// Stop timed fire blocks from fading 

@@ -1,5 +1,7 @@
 // See here: http://wiki.bukkit.org/Scheduler_Programming
 // Removed doDaylightCycle dependency
+// implemented addRandom with gaussian distribution
+// Added remove() to catch same block being rescheduled
 
  package com.yahoo.phil_work.antifire;
 
@@ -7,6 +9,7 @@ import java.util.Comparator;
 import java.util.TreeSet;
 import java.util.ArrayList;
 import java.lang.NullPointerException;
+import java.util.Random;
 
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitScheduler;
@@ -26,6 +29,8 @@ class TimedExtinguisher extends	BukkitRunnable {
 	private Plugin plugin;
 	private TreeSet <TimedBlock> FixedLengthBlocks = null;
 	private World world;
+	private static final Random rng = new Random();
+
 	BukkitTask myTask;
 	
 	TimedExtinguisher (Plugin p, World w) 
@@ -38,22 +43,41 @@ class TimedExtinguisher extends	BukkitRunnable {
 		
 		String worldName = w.getName();
 	}
-	long ticksToMillisecs (final long ticks) {
+	static long ticksToMillisecs (final long ticks) {
 		return ticks * 1000 /20L; 
 	}
-	long millisecsToTicks (final long ms) {
+	static long millisecsToTicks (final long ms) {
 		return ms * 20L /1000L; 
+	}
+	// adds block to extinguish with standard bell curve between min/max, such that min/max are at 
+	//   2*standard deviation. 70% should be within 1, and 27% within 2.
+	static long nextRandom (long min, long max) {
+		long width = max - min;
+		long mean = (max + min) /2;
+		
+		return (long)(rng.nextGaussian() * width/4 + mean);
+	}
+	// adds block to extinguish with standard bell curve between min/max
+	public void addRandom (BlockState state, long minTicks, long maxTicks) {
+		long delay = nextRandom (minTicks, maxTicks);
+		plugin.getLogger().fine ("Random " + delay + " from (" +minTicks+ ", " +maxTicks + ")");
+		this.add (state, delay);
 	}
 	// Managing list of blocks to put out
 	// delay MUST be in TICKS
 	public void add (BlockState state, long delay) {
 		// expiry in TICKs
+		if (delay < 0)
+			delay = 0;
 		long expiry = ticksToMillisecs (delay) + System.currentTimeMillis();
 		
 		if (state == null) return;
 		
 		if (state.getWorld().getUID() == this.world.getUID()) {
 			TimedBlock tb = new TimedBlock (state, expiry);
+			
+			// if (contains (state.getLocation())) // don't search twice
+				remove (state.getLocation()); // in case already set with different timer
 			FixedLengthBlocks.add (tb);
 	
 	  	    if (expiry == FixedLengthBlocks.first().getExpiry()) 
@@ -98,6 +122,30 @@ class TimedExtinguisher extends	BukkitRunnable {
 	  plugin.getLogger().finer ("Can't find location " + loc + " in timedExtingisher for " + world.getName()); 
 	  return false;
 	}	
+	public void remove (Location loc) {
+		World w = loc.getWorld();
+		if (w.getUID() == this.world.getUID()) {
+		  // unfortunately have to do a linear search...
+		  int i = 0;
+		  TimedBlock found = null;
+		  
+		  for (TimedBlock b : FixedLengthBlocks) {
+		  	// plugin.getLogger().finer (w.getName() + " block " + i++ + " expires " + b.getExpiry());
+		  	
+		  	int x = loc.getBlockX(), y = loc.getBlockY(), z= loc.getBlockZ();
+		  	Location bl = b.getLocation();
+		  	int bx = bl.getBlockX(), by = bl.getBlockY(), bz = bl.getBlockZ();
+			if (x==bx && y==by && z==bz) {
+				found = b;
+				break;
+			}
+		  }
+		  if (found != null)
+		  	FixedLengthBlocks.remove (found);
+	  }
+	}	
+	
+	
 	public boolean isEmpty() {
 		return FixedLengthBlocks == null || FixedLengthBlocks.isEmpty();
 	}
