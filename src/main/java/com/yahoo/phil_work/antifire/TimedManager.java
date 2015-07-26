@@ -1,4 +1,5 @@
 // implemented addRandom with range of times
+// 25 Jul 2015 : PSW: Added isRainingAt() and rainOverridesTimed()
 
 package com.yahoo.phil_work.antifire;
 
@@ -16,6 +17,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
+import org.bukkit.ChunkSnapshot;
 
 import com.yahoo.phil_work.antifire.TimedExtinguisher;
 import com.yahoo.phil_work.antifire.IgniteCause;
@@ -123,6 +125,9 @@ class TimedManager implements Listener {
 	}		
 	public boolean foreverBlocksToo () {
 		return plugin.getConfig().getBoolean ("nerf_fire.timeNetherackToo");
+	}
+	public boolean rainOverridesTimed () {
+		return plugin.getConfig().getBoolean ("nerf_fire.rainOverridesTimed", false);
 	}
 
 	/*
@@ -294,6 +299,20 @@ class TimedManager implements Listener {
 			add (state, Min);
 	}
 	
+	private boolean isRainingAt (Location loc) {
+		ChunkSnapshot chunk= loc.getChunk().getChunkSnapshot (false, false, /*temprain*/ true);
+		int x = loc.locToBlock (loc.getX()), z = loc.locToBlock (loc.getZ());
+		// now they are int versions of the world-relative locations
+		x -= chunk.getX() * 16; z -= chunk.getZ() * 16;
+		// now they are chunk-relative versions
+		if ((x < 0 || x > 15) || (z < 0 || z > 15)) {
+			plugin.getLogger().warning ("x,y (" + x + "," + z + ") out of chunk range");
+			return false;
+		}
+		double rainlevel = chunk.getRawBiomeRainfall (x, z);
+		return (rainlevel > 0);
+	}
+	
 	// Stop timed fire blocks from fading 
 	@EventHandler (ignoreCancelled = true)
 	public void onFireOut (BlockFadeEvent  event)
@@ -308,8 +327,13 @@ class TimedManager implements Listener {
 			TimedExtinguisher te = WorldTimed.get (w.getName());
 		
 			if (te != null && te.contains (loc)) {
-				event.setCancelled (true); // stop going out
-				plugin.getLogger().fine ("Stopped block fading in " + w.getName());
+				if (rainOverridesTimed() && isRainingAt (loc)) { 
+					plugin.getLogger().fine ("Allowed rain to put out timed block at " + loc);
+					te.remove (loc);
+				} else {
+					event.setCancelled (true); // stop going out
+					plugin.getLogger().fine ("Stopped block fading in " + w.getName());
+				}
 			}
 			else {
 				plugin.getLogger().finer ("Unwatched block fade at " + loc);

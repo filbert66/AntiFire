@@ -71,3 +71,4 @@ nerf_fire:
       ACACIA_LOG: 4
       DARKOAK_LOG: 5
     anydropchance: 75
+  rainOverridesTimed: false

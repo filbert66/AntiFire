@@ -358,7 +358,7 @@ public class AntiFireman implements Listener
 	public boolean ifConfigContains (String configkey, String pattern) 
 	{		
 		if (!plugin.getConfig().isSet (configkey) && configkey.contains ("nodamageto") && !configkey.contains (".player")) {
-			plugin.log.fine (configkey + " not set; changing to nonplayer");
+			//*DEBUG*/plugin.log.fine (configkey + " not set; changing to nonplayer");
 			int l= configkey.length();
 			configkey = "nerf_fire.nodamageto.nonplayer.from" + configkey.substring (l-4, l); //"lava" or "fire"
 		}
