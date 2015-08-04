@@ -88,6 +88,8 @@ class TimedExtinguisher extends	BukkitRunnable {
 					plugin.getLogger().fine ("First run; wasn't scheduled");
 				}
 				try {
+					// FUTURE in 1.8: Will I be able to call this any more? May have to use this.runTaskLater()...
+					//   but 1.7 had bug there that wouldn't allow rescheduling a task.
 					myTask = plugin.getServer().getScheduler().runTaskLater (plugin, this, delay); // reschedule
 				} catch (IllegalArgumentException e) {
 					// plugin was null

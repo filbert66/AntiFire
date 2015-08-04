@@ -22,6 +22,7 @@
  *  07 Sep 2014 : PSW : Added language support. 
  *  19 Dec 2014 : PSW : Unitialized logFile variables.
  *  12 Jul 2015 : PSW : Added command support for variable timed range.
+ *  03 Aug 2015 : PSW : Added command support for world-setting of rain, nether variables for "timed".
  */
  
 package com.yahoo.phil_work.antifire;
@@ -85,7 +86,7 @@ public class AntiFire extends JavaPlugin {
     public Logger log;
     LanguageWrapper language;
 	PluginDescriptionFile pdfFile;
-	private final AntiFireman antiFire = new AntiFireman (this);
+	protected final AntiFireman antiFire = new AntiFireman (this);
 	private String Log_Level;
 	public AntifireLog fireLog;
 	private Map<CommandSender, Integer> Lastlog;  // for log "next" command
@@ -540,6 +541,7 @@ public class AntiFire extends JavaPlugin {
 		else if (commandName.equals("timed")) {
 			final String TimedName = "nerf_fire.timedcauses";
 			final String netherName = "nerf_fire.timeNetherackToo";
+			final String rainName = "nerf_fire.rainOverridesTimed";
 			
 			if (args.length == 1) {
 				antiFire.printConfig (sender, TimedName);
@@ -548,13 +550,35 @@ public class AntiFire extends JavaPlugin {
 				String key = args[1];
 				IgniteCause cause = IgniteCause.matchIgniteCause (key);
 				if (cause == null) {
-					if (key.equals ("netherack")) {
+				
+					if (key.startsWith ("netherack") || key.startsWith ("rain")) 
+					{
+						final String item = (key.startsWith ("netherack") ? netherName : rainName);
 						if (args.length == 3) {
-							this.getConfig().set (netherName, args[2].equalsIgnoreCase ("true"));
-							sender.sendMessage ("Set " + netherName + " to " + getConfig().getBoolean (netherName));
+							boolean newVal = args[2].equalsIgnoreCase ("true");
+							if ( !(sender instanceof Player)) {// no params or can't impute world
+								sender.sendMessage (pdfFile.getName() + ": Cannot get current world of SERVER");
+								return false;
+							}
+							String wName = ((Player)sender).getLocation().getWorld().getName();
+							
+							List <String> tNeth = (this.getConfig().isString (item) ?
+													new ArrayList(Arrays.asList(getConfig().getString (item).split(","))) : 
+													getConfig().getStringList (item) );
+							// this.log.fine ("Current tNeth=" + tNeth);
+							if (! newVal) { 
+								tNeth.remove (wName);
+							}
+							else if (! antiFire.ifConfigContains (item, wName))
+								tNeth.add (wName);
+				
+							this.getConfig().set (item, tNeth);
+							final String msg = (key.startsWith ("netherack") ? "Timing netherack" : "Rain stops timed");
+							sender.sendMessage (ChatColor.BLUE + msg + " now in: " + ChatColor.GRAY + tNeth);						
 						} else 
-							antiFire.printConfigKey (sender, netherName);
+							antiFire.printConfigKey (sender, item);
 						return true;
+
 					} else if ( !key.equals ("clear")) {
 						sendMsg (sender, ChatColor.RED + "Unknown ignite cause '" + ChatColor.RESET + key + "'");
 						return false;					
@@ -613,7 +637,6 @@ public class AntiFire extends JavaPlugin {
 				boolean turnOnSpread = args[1].toLowerCase().equals("on");
 				String wName = p.getLocation().getWorld().getName();
 
-				// Not working when config is a string. Need to 
 				List <String> noSpread = (this.getConfig().isString ("nerf_fire.nospread") ?
 											new ArrayList(Arrays.asList(getConfig().getString ("nerf_fire.nospread").split(","))) : 
 											getConfig().getStringList ("nerf_fire.nospread") );

@@ -1,5 +1,6 @@
 // implemented addRandom with range of times
 // 25 Jul 2015 : PSW: Added isRainingAt() and rainOverridesTimed()
+// 03 Aug 2015 : PSW: Made above world-based.
 
 package com.yahoo.phil_work.antifire;
 
@@ -82,13 +83,13 @@ class TimedManager implements Listener {
 	}	
 	private HashMap <String, TimedExtinguisher> WorldTimed = new HashMap (8);
 	private HashMap <IgniteCause, TimedLength> TimedCause = new HashMap ();
-	private Plugin plugin;
+	private AntiFire plugin;
 
-	TimedManager (Plugin p) {
+	TimedManager (AntiFire p) {
 		this.plugin = p;
 
 		for (World w : p.getServer().getWorlds()) {
-			TimedExtinguisher te = new TimedExtinguisher (p, w);
+			TimedExtinguisher te = new TimedExtinguisher ((Plugin)p, w);
 			if (te != null)
 				WorldTimed.put (w.getName(), te);
 		}
@@ -126,8 +127,35 @@ class TimedManager implements Listener {
 	public boolean foreverBlocksToo () {
 		return plugin.getConfig().getBoolean ("nerf_fire.timeNetherackToo");
 	}
+	public boolean foreverBlocksToo (World w) {
+		if (w == null)
+			return foreverBlocksToo();
+		else
+			return foreverBlocksToo (w.getName());
+	}
+	public boolean foreverBlocksToo (String worldName) {	
+		String item = plugin.getConfig().getString ("nerf_fire.timeNetherackToo");
+		
+		if (item.equals ("true"))
+			return true;
+		else		
+			return plugin.antiFire.ifConfigContains ("nerf_fire.timeNetherackToo", worldName);
+	}
+	
 	public boolean rainOverridesTimed () {
 		return plugin.getConfig().getBoolean ("nerf_fire.rainOverridesTimed", false);
+	}
+	public boolean rainOverridesTimed (World w) {
+		if (w == null)
+			return rainOverridesTimed();
+			
+		String worldName = w.getName();
+		String item = plugin.getConfig().getString ("nerf_fire.rainOverridesTimed");
+		
+		if (item.equals ("true"))
+			return true;
+		else		
+			return plugin.antiFire.ifConfigContains ("nerf_fire.rainOverridesTimed", worldName);
 	}
 
 	/*
@@ -300,17 +328,7 @@ class TimedManager implements Listener {
 	}
 	
 	private boolean isRainingAt (Location loc) {
-		ChunkSnapshot chunk= loc.getChunk().getChunkSnapshot (false, false, /*temprain*/ true);
-		int x = loc.locToBlock (loc.getX()), z = loc.locToBlock (loc.getZ());
-		// now they are int versions of the world-relative locations
-		x -= chunk.getX() * 16; z -= chunk.getZ() * 16;
-		// now they are chunk-relative versions
-		if ((x < 0 || x > 15) || (z < 0 || z > 15)) {
-			plugin.getLogger().warning ("x,y (" + x + "," + z + ") out of chunk range");
-			return false;
-		}
-		double rainlevel = chunk.getRawBiomeRainfall (x, z);
-		return (rainlevel > 0);
+		return (loc.getWorld().hasStorm());
 	}
 	
 	// Stop timed fire blocks from fading 
@@ -327,7 +345,7 @@ class TimedManager implements Listener {
 			TimedExtinguisher te = WorldTimed.get (w.getName());
 		
 			if (te != null && te.contains (loc)) {
-				if (rainOverridesTimed() && isRainingAt (loc)) { 
+				if (rainOverridesTimed(w) && isRainingAt (loc)) { 
 					plugin.getLogger().fine ("Allowed rain to put out timed block at " + loc);
 					te.remove (loc);
 				} else {

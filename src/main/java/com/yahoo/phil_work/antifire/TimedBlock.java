@@ -1,3 +1,7 @@
+/***
+ * 30 Jul 2015 : PSW : Added isPlaced() to be compatible with MC 1.8
+ */
+
 package com.yahoo.phil_work.antifire;
 
 import java.util.List;
@@ -82,6 +86,7 @@ class TimedBlock implements BlockState
 	public boolean update(boolean force, boolean applyPhysics) {
 		return state.update (force, applyPhysics); 
 	}
+	public boolean isPlaced () { return false; } // never used
 
 	@Deprecated
 	public void setRawData(byte data) { state.setRawData(data); } 

@@ -1,3 +1,7 @@
+/****
+* 30 Jul 2015 : PSW : Added isRepairable(), isAnvilRepairable()
+*/
+
 package com.yahoo.phil_work;
 
 import org.bukkit.Material;
@@ -146,7 +150,28 @@ public class MaterialCategory {
 				return false;
 		}
 	}
-	
+	// Returns true if can be repaired in crafting window by combining
+	public static boolean isRepairable (Material type) {
+		return (type.getMaxDurability() > 0);
+	}
+	public static boolean isAnvilRepairable (Material type) {
+		if (! isRepairable(type))
+			return false;
+
+		// now catch unrepairable items
+		switch (type) {
+			case BOW:
+			case SHEARS:
+			case FLINT_AND_STEEL:
+			case FISHING_ROD:
+			case CARROT_STICK:
+				return false;
+			default:
+				return true;
+		}
+	}
+
+	// Returns the raw material that can be used for repair of this item, or null
 	public static Material getRawMaterial (Material item) {
 		switch (item) {
 			case DIAMOND_BARDING:

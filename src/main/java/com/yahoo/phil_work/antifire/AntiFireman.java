@@ -34,6 +34,8 @@
  *    May 2014 : PSW : Use new UUID firelog calls.
  * 18 Dec 2014 : PSW : Expand .nonplayer to hostilemob, peacefulmob, mob, drops, painting, item
  * 21 Jan 2015 : PSW : avoid NPE on restart with timedMgr.
+ * 30 Jul 2015 : PSW : Disabiguated getTargetBlock to be compatible with MC 1.8
+ * 03 Aug 2015 : PSW : Pass worldName to timeForeverBlocksToo()
  */
 
  package com.yahoo.phil_work.antifire;
@@ -44,6 +46,7 @@ import java.util.Random;
 import java.util.logging.Logger;
 import java.util.Collection;
 import java.util.LinkedList;
+import java.util.HashSet;
 //import java.util.regex.Pattern;
 import java.util.logging.Level;
 import java.lang.Character;
@@ -435,7 +438,8 @@ public class AntiFireman implements Listener
 					loglevel = Level.INFO;
 				}
 				else if (event.getCause() == BlockIgniteEvent.IgniteCause.FLINT_AND_STEEL) // if fireball, he might have looked away
-					target = p.getTargetBlock(null, 5); // what is he trying to ignite w/in clickable distance?
+					// calling deprecated version but OK since parameter is null
+					target = p.getTargetBlock((HashSet<Byte>) null, 5); // what is he trying to ignite w/in clickable distance?
 				break;
 				
 			case LIGHTNING:// need to test
@@ -506,7 +510,7 @@ public class AntiFireman implements Listener
 
 			// Call TimedBlock here.
 			if (timedMgr != null && 
-				timedMgr.ifTimedDelayFor (detailedCause) && (!burnsForever (block) || timedMgr.foreverBlocksToo()) ) 
+				timedMgr.ifTimedDelayFor (detailedCause) && (!burnsForever (block) || timedMgr.foreverBlocksToo(worldName)) ) 
 				timedMgr.setTimedDelay (detailedCause, event.getBlock().getState());
 			
 			if (shouldLog)
@@ -880,6 +884,7 @@ Chc	Max	average
 		Block burner = event.getCombuster();
 		
 		if (burner == null) {
+			plugin.log.fine ("EntityCombust by null block");
 			onEntityCombust ((EntityCombustEvent) event);
 			return;
 		}
