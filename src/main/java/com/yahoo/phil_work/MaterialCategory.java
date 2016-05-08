@@ -1,5 +1,6 @@
 /****
 * 30 Jul 2015 : PSW : Added isRepairable(), isAnvilRepairable()
+* 28 Mar 2016 : PSW : 1.9- added ELYTRA, SHIELD
 */
 
 package com.yahoo.phil_work;
@@ -81,6 +82,7 @@ public class MaterialCategory {
 			case FLINT_AND_STEEL:
 			case FISHING_ROD:
 			case CARROT_STICK:
+			case SHIELD:
 				return true;
 			default:
 				return false;
@@ -232,6 +234,9 @@ public class MaterialCategory {
 			case LEATHER_CHESTPLATE:
 			case LEATHER_HELMET:
 			case LEATHER_LEGGINGS:
+				return Material.LEATHER;
+				
+			case ELYTRA:
 				return Material.LEATHER;
 		}
 		return null;

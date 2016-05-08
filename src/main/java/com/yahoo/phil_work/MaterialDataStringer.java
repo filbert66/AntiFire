@@ -2,6 +2,7 @@
  * History
  *  05 Dec 2013 : Corrected dark oak to "DARK_OAK"
  *  14 Jan 2013 : Work around bug in Tree.setSpecies() that doesn't set type & data properly for new types.
+ *  24 Mar 2016 : Added 1.9 new blocks: Banner, 
  */
 package com.yahoo.phil_work;
 
@@ -204,6 +205,26 @@ public class MaterialDataStringer extends MaterialData {
 		altNames.put("VILLAGER_EGG", new SpawnEgg (EntityType.VILLAGER));
 		altNames.put("HORSE_EGG", new SpawnEgg (EntityType.HORSE));
 		
+		altNames.put("WHITE_BANNER", new Banner (Material.WOOL, DyeColor.WHITE.getWoolData()));
+	 	altNames.put("ORANGE_BANNER", new Banner(Material.WOOL, DyeColor.ORANGE.getWoolData()));
+		altNames.put("MAGENTA_BANNER", new Banner (Material.WOOL, DyeColor.MAGENTA.getWoolData()));
+		altNames.put("LIGHT_BLUE_BANNER", new Banner (Material.WOOL, DyeColor.LIGHT_BLUE.getWoolData()));
+		altNames.put("YELLOW_BANNER", new Banner (Material.WOOL, DyeColor.YELLOW.getWoolData()));
+		altNames.put("LIME_BANNER", new Banner (Material.WOOL, DyeColor.LIME.getWoolData()));
+		altNames.put("PINK_BANNER", new Banner (Material.WOOL, DyeColor.PINK.getWoolData()));
+		altNames.put("GRAY_BANNER", new Banner (Material.WOOL, DyeColor.GRAY.getWoolData()));
+		altNames.put("GREY_BANNER", new Banner (Material.WOOL, DyeColor.GRAY.getWoolData()));
+		altNames.put("LIGHT_GRAY_BANNER", new Banner (Material.WOOL, DyeColor.SILVER.getWoolData()));
+		altNames.put("LIGHT_GREY_BANNER", new Banner (Material.WOOL, DyeColor.SILVER.getWoolData()));
+		altNames.put("SILVER_BANNER", new Banner (Material.WOOL, DyeColor.SILVER.getWoolData()));
+		altNames.put("CYAN_BANNER", new Banner (Material.WOOL, DyeColor.CYAN.getWoolData()));
+		altNames.put("PURPLE_BANNER", new Banner (Material.WOOL, DyeColor.PURPLE.getWoolData()));
+		altNames.put("BLUE_BANNER", new Banner (Material.WOOL, DyeColor.BLUE.getWoolData()));
+		altNames.put("BROWN_BANNER", new Banner (Material.WOOL, DyeColor.BROWN.getWoolData()));
+		altNames.put("GREEN_BANNER", new Banner (Material.WOOL, DyeColor.GREEN.getWoolData()));
+		altNames.put("RED_BANNER", new Banner (Material.WOOL, DyeColor.RED.getWoolData()));
+		altNames.put("BLACK_BANNER", new Banner (Material.WOOL, DyeColor.BLACK.getWoolData()));
+	
 		} catch (Throwable t) {
 			System.out.println ("MaterialDataStringer: FAILURE during static initialization: " + t);
 		}
@@ -223,6 +244,8 @@ public class MaterialDataStringer extends MaterialData {
 		return mat;
 	}
 	static public MaterialData matchMaterialData (String name) {
+		if (name == null)
+			return null;
 		MaterialData md = altNames.get (name.toUpperCase());
 		if (md != null) {
 			// Bukkit.getLogger().config ("Matched alternative name '" + name + "' for " + md);
