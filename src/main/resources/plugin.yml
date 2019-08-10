@@ -9,12 +9,13 @@
 # May 03 2013; added burnentity perm
 # May 15 2013: added burnmob, burnplayer permissions
 # Sep 22 2013: added lava permissions
+# Aug 09 2019: Added api-version: 1.13
 
 name: AntiFire
 
 main: com.yahoo.phil_work.antifire.AntiFire
 
-version: 2.9
+version: 3.0
 
 author: Filbert66
 
@@ -22,13 +23,14 @@ description: >
 
              Fire control, for starting/placement, damage, spread. Includes logging and commands to TP to last fire placement and to extinguish fires
 
+api-version: 1.13
 
 commands:
 
   af:
     alias: antifire
     description: Admin AntiFire command prefix
-    usage: <command> print|flush|save|reload|fireproof [\#]|burnable [\#]|spread [on|off]| Further config options at http://bit.ly/YdIKa3
+    usage: <command> print|flush|save|reload|fireproof [blockname]|burnable [blockname]|spread [on|off]| Further config options at http://bit.ly/YdIKa3
     permission: antifire.admin
   log:
     alias: lf

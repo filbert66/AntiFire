@@ -3,6 +3,14 @@
  *  05 Dec 2013 : Corrected dark oak to "DARK_OAK"
  *  14 Jan 2013 : Work around bug in Tree.setSpecies() that doesn't set type & data properly for new types.
  *  24 Mar 2016 : Added 1.9 new blocks: Banner, 
+ *  13 Dec 2017 : Remove use of magic IDs
+ *  	too many new block IDs! Don't want to have to maintain this any more; 
+ *        keep old data strings and wait for what's new in 1.13.
+ ************
+ *  3 Aug 2019 : Replace with new Spigit 1.13 API/names
+ *                   MaterialData-> BlockData or Material
+ * 					
+ * 
  */
 package com.yahoo.phil_work;
 
@@ -12,218 +20,99 @@ import java.lang.IllegalArgumentException;
 import java.util.Set;
 
 import org.bukkit.Bukkit;
-import org.bukkit.CoalType;
-import org.bukkit.DyeColor;
 import org.bukkit.Material;
 import org.bukkit.material.*;
 import org.bukkit.entity.EntityType;
-import org.bukkit.GrassSpecies;
-import org.bukkit.SandstoneType;
-import org.bukkit.SkullType;
-import org.bukkit.TreeSpecies;
 
-public class MaterialDataStringer extends MaterialData {
+// @SuppressWarnings("deprecation") // until new block data interface is present
+public class MaterialDataStringer  {
 
 	// Future: Read in from separate config file.
-    private static final HashMap<String, MaterialData> altNames = new HashMap<String, MaterialData>();
-	private static boolean newTreeTypes = false;
+    private static final HashMap<String, Material> altNames = new HashMap<String, Material>();
+	// private static boolean newTreeTypes = true;
     static
-    {
+    {		
     	try {
-    		if (TreeSpecies.valueOf ("ACACIA") != null)
-				newTreeTypes = true;
-		} catch (NullPointerException e) {
-			newTreeTypes = false;
-		} catch (IllegalArgumentException  e) {
-			newTreeTypes = false;
-		}
-		
-    	try {
-        altNames.put("GUNPOWDER", new MaterialData (Material.SULPHUR));
-        altNames.put("WOOD_SHOVEL", new MaterialData (Material.WOOD_SPADE));
-        altNames.put("STONE_SHOVEL", new MaterialData (Material.STONE_SPADE));
-        altNames.put("IRON_SHOVEL", new MaterialData (Material.IRON_SPADE));
-        altNames.put("GOLD_SHOVEL", new MaterialData (Material.GOLD_SPADE));
-        altNames.put("DIAMOND_SHOVEL", new MaterialData (Material.DIAMOND_SPADE)); 
-        altNames.put("FIRECHARGE", new MaterialData (Material.FIREBALL));
-        altNames.put("ENDER_EYE", new MaterialData (Material.EYE_OF_ENDER));  
-        altNames.put("PLANKS", new MaterialData (Material.WOOD));
-        altNames.put("MYCELIUM", new MaterialData (Material.MYCEL));
-        altNames.put("RED_FLOWER", new MaterialData (Material.RED_ROSE));
-        altNames.put("POPPY", new MaterialData (Material.RED_ROSE));
-        altNames.put("DANDELION", new MaterialData (Material.YELLOW_FLOWER));
-        altNames.put("LILY_PAD", new MaterialData (Material.WATER_LILY));
-        altNames.put("NETHER_PORTAL", new MaterialData (Material.PORTAL));
-        altNames.put("LIT_PUMPKIN", new MaterialData (Material.JACK_O_LANTERN));
-                
-        altNames.put("CHARCOAL", new Coal (CoalType.CHARCOAL));
-
-        altNames.put("WITHER_SKULL", new Skull (Material.SKULL_ITEM, (byte)SkullType.WITHER.ordinal()));
-        altNames.put("CREEPER_HEAD",  new Skull (Material.SKULL_ITEM, (byte)SkullType.CREEPER.ordinal()));
-        altNames.put("SKELETON_SKULL",  new Skull (Material.SKULL_ITEM, (byte)SkullType.SKELETON.ordinal()));
-        altNames.put("PLAYER_HEAD",  new Skull (Material.SKULL_ITEM, (byte)SkullType.PLAYER.ordinal()));
-        altNames.put("ZOMBIE_HEAD",  new Skull (Material.SKULL_ITEM, (byte)SkullType.ZOMBIE.ordinal()));
+        altNames.put("GUNPOWDER", Material.GUNPOWDER);
+        altNames.put("SULPHUR", Material.GUNPOWDER);
         
-        altNames.put("GENERIC_LOG", new Tree (TreeSpecies.GENERIC));
-        altNames.put("OAK_LOG", new Tree (TreeSpecies.GENERIC));
-        altNames.put("BIRCH_LOG", new Tree (TreeSpecies.BIRCH));
-        altNames.put("JUNGLE_LOG", new Tree (TreeSpecies.JUNGLE));
-        altNames.put("REDWOOD_LOG", new Tree (TreeSpecies.REDWOOD));
-        altNames.put("SPRUCE_LOG", new Tree (TreeSpecies.REDWOOD));
-        if (newTreeTypes) {
-			System.out.println ("MaterialDataStringer: ACACIA and OAK present");
-			
-			// Work around Bukkit 1.7.2 bug that doesn't set Type() to LOG_2 when setting species.
-			Tree tree = new Tree (Material.LOG_2);
-			// Ref: http://minecraft.gamepedia.com/Data_values#Wood for only lower order 2 bits
-			tree.setData ((byte)(0x3 & TreeSpecies.valueOf ("ACACIA").getData())); altNames.put("ACACIA_LOG", tree);
-			tree = tree.clone();
-			tree.setData ((byte)(0x3 & TreeSpecies.valueOf ("DARK_OAK").getData())); altNames.put("DARKOAK_LOG", tree);
-		}        
-		Tree tree = new Tree (Material.WOOD); tree.setSpecies (TreeSpecies.GENERIC);
-        altNames.put("GENERIC_WOOD", tree);  altNames.put("GENERIC_PLANKS", tree); 
-        altNames.put("OAK_WOOD", tree);      altNames.put("OAK_PLANKS", tree);
-        tree = tree.clone(); tree.setSpecies (TreeSpecies.BIRCH);
-        altNames.put("BIRCH_WOOD", tree);        altNames.put("BIRCH_PLANKS", tree);
-        tree = tree.clone(); tree.setSpecies (TreeSpecies.JUNGLE);
-        altNames.put("JUNGLE_WOOD", tree);       altNames.put("JUNGLE_PLANKS", tree);
-        tree = tree.clone(); tree.setSpecies (TreeSpecies.REDWOOD);
-        altNames.put("REDWOOD_WOOD", tree);        altNames.put("REDWOOD_PLANKS", tree);
-        altNames.put("SPRUCE_WOOD", tree);        altNames.put("SPRUCE_PLANKS", tree);
-        if (newTreeTypes) {
-        	// Have to call setData vs. setSpecies since latter only sets lower 2 bits. 
-			tree = tree.clone(); tree.setData (TreeSpecies.valueOf ("ACACIA").getData());
-			altNames.put("ACACIA_WOOD", tree); 			altNames.put("ACACIA_PLANKS", tree);
-			tree = tree.clone(); tree.setData (TreeSpecies.valueOf ("DARK_OAK").getData());
-			altNames.put("DARKOAK_WOOD", tree);			altNames.put("DARKOAK_PLANKS", tree);
-		} 
-        altNames.put("GENERIC_LEAVES", new Tree (Material.LEAVES, (byte)TreeSpecies.GENERIC.ordinal()));
-        altNames.put("OAK_LEAVES", new Tree (Material.LEAVES, (byte)TreeSpecies.GENERIC.ordinal()));
-        altNames.put("BIRCH_LEAVES", new Tree (Material.LEAVES, (byte)TreeSpecies.BIRCH.ordinal()));
-        altNames.put("JUNGLE_LEAVES", new Tree (Material.LEAVES, (byte)TreeSpecies.JUNGLE.ordinal()));
-        altNames.put("REDWOOD_LEAVES", new Tree (Material.LEAVES, (byte)TreeSpecies.REDWOOD.ordinal()));
-        altNames.put("SPRUCE_LEAVES", new Tree (Material.LEAVES, (byte)TreeSpecies.REDWOOD.ordinal()));
-        if (newTreeTypes) {
-			// Work around Bukkit 1.7.2 bug that doesn't set Type() to LOG_2 when setting species.
-        	tree = new Tree (Material.LEAVES_2);
- 			// Ref: http://minecraft.gamepedia.com/Data_values#Leaves for only lower order 2 bits
-       		tree.setData ((byte)(0x3 & TreeSpecies.valueOf ("ACACIA").getData())); altNames.put("ACACIA_LEAVES", tree);
-			tree = tree.clone();
-			tree.setData ((byte)(0x3 & TreeSpecies.valueOf ("DARK_OAK").getData())); altNames.put("DARKOAK_LEAVES", tree);
-		} 
-        altNames.put("GENERIC_SAPLING", new Tree (Material.SAPLING, (byte)TreeSpecies.GENERIC.ordinal()));
-        altNames.put("OAK_SAPLING", new Tree (Material.SAPLING, (byte)TreeSpecies.GENERIC.ordinal()));
-        altNames.put("BIRCH_SAPLING", new Tree (Material.SAPLING, (byte)TreeSpecies.BIRCH.ordinal()));
-        altNames.put("JUNGLE_SAPLING", new Tree (Material.SAPLING, (byte)TreeSpecies.JUNGLE.ordinal()));
-        altNames.put("REDWOOD_SAPLING", new Tree (Material.SAPLING, (byte)TreeSpecies.REDWOOD.ordinal()));
-        altNames.put("SPRUCE_SAPLING", new Tree (Material.SAPLING, (byte)TreeSpecies.REDWOOD.ordinal()));
-        if (newTreeTypes) {
-			// Have to init with byte vs. TreeSpecies since latter constructor only sets lower 2 bits. 
-			altNames.put("ACACIA_SAPLING", new Tree (Material.SAPLING, (byte)TreeSpecies.valueOf ("ACACIA").ordinal()));
-			altNames.put("DARKOAK_SAPLING", new Tree (Material.SAPLING, (byte)TreeSpecies.valueOf ("DARK_OAK").ordinal()));
-		}
-        altNames.put("SMOOTH_SANDSTONE", new Sandstone (SandstoneType.SMOOTH));
-        altNames.put("GLYPHED_SANDSTONE", new Sandstone (SandstoneType.GLYPHED));
-        altNames.put("CHISELED_SANDSTONE", new Sandstone (SandstoneType.GLYPHED));
-        altNames.put("CRACKED_SANDSTONE", new Sandstone (SandstoneType.CRACKED));
+        altNames.put("WOOD_SHOVEL", Material.WOODEN_SHOVEL);
+        altNames.put("GOLD_SHOVEL", Material.GOLDEN_SHOVEL);
 
-		altNames.put("ORANGE_DYE", new Dye(Material.INK_SACK, DyeColor.ORANGE.getDyeData()));
-		altNames.put("MAGENTA_DYE", new Dye(Material.INK_SACK, DyeColor.MAGENTA.getDyeData()));
-		altNames.put("LIGHT_BLUE_DYE", new Dye(Material.INK_SACK, DyeColor.LIGHT_BLUE.getDyeData()));
-		altNames.put("YELLOW_DYE", new Dye(Material.INK_SACK, DyeColor.YELLOW.getDyeData()));
-		altNames.put("DANDELION_YELLOW", new Dye(Material.INK_SACK, DyeColor.YELLOW.getDyeData()));
-		altNames.put("LIME_DYE", new Dye(Material.INK_SACK, DyeColor.LIME.getDyeData()));
-		altNames.put("PINK_DYE", new Dye(Material.INK_SACK, DyeColor.PINK.getDyeData()));
-		altNames.put("GRAY_DYE", new Dye(Material.INK_SACK, DyeColor.GRAY.getDyeData()));
-		altNames.put("GREY_DYE", new Dye(Material.INK_SACK, DyeColor.GRAY.getDyeData()));
-		altNames.put("LIGHT_GRAY_DYE", new Dye(Material.INK_SACK, DyeColor.SILVER.getDyeData()));
-		altNames.put("LIGHT_GREY_DYE", new Dye(Material.INK_SACK, DyeColor.SILVER.getDyeData()));
-		altNames.put("SILVER_DYE", new Dye(Material.INK_SACK, DyeColor.SILVER.getDyeData()));
-		altNames.put("CYAN_DYE", new Dye(Material.INK_SACK, DyeColor.CYAN.getDyeData()));
-		altNames.put("PURPLE_DYE", new Dye(Material.INK_SACK, DyeColor.PURPLE.getDyeData()));
-		altNames.put("BLUE_DYE", new Dye(Material.INK_SACK, DyeColor.BLUE.getDyeData()));
-		altNames.put("LAPIS_LAZULI", new Dye(Material.INK_SACK, DyeColor.BLUE.getDyeData()));
-		altNames.put("COCOA_BEANS", new Dye(Material.INK_SACK, DyeColor.BROWN.getDyeData()));
-		altNames.put("BROWN_DYE", new Dye(Material.INK_SACK, DyeColor.BROWN.getDyeData()));
-		altNames.put("GREEN_DYE", new Dye(Material.INK_SACK, DyeColor.GREEN.getDyeData()));
-		altNames.put("CACTUS_GREEN", new Dye(Material.INK_SACK, DyeColor.GREEN.getDyeData()));
-		altNames.put("ROSE_RED", new Dye(Material.INK_SACK, DyeColor.RED.getDyeData()));
-		altNames.put("RED_DYE", new Dye(Material.INK_SACK, DyeColor.RED.getDyeData()));
-		altNames.put("BLACK_DYE", new Dye(Material.INK_SACK, DyeColor.BLACK.getDyeData()));
-		altNames.put("INK_SAC", new Dye(Material.INK_SACK, DyeColor.BLACK.getDyeData()));
-		altNames.put("INK_SACK", new Dye(Material.INK_SACK, DyeColor.BLACK.getDyeData()));
+        altNames.put("FIRECHARGE", Material.FIRE_CHARGE);
+        altNames.put("PLANKS", Material.OAK_PLANKS);
+        altNames.put("RED_FLOWER", Material.RED_DYE);
+        altNames.put("LIT_PUMPKIN", Material.JACK_O_LANTERN);
+                
+		altNames.put("WITHER_SKULL", Material.WITHER_SKELETON_SKULL);
+        
+        altNames.put("GENERIC_LOG", Material.OAK_LOG);
+        altNames.put("REDWOOD_LOG", Material.SPRUCE_LOG);
+		altNames.put("DARKOAK_LOG", Material.DARK_OAK_LOG);
+		
+        altNames.put("GENERIC_WOOD", Material.OAK_WOOD);
+        altNames.put("REDWOOD_WOOD", Material.SPRUCE_WOOD);
+		altNames.put("DARKOAK_WOOD", Material.DARK_OAK_WOOD);
+
+        altNames.put("GENERIC_LEAVES", Material.OAK_LEAVES);
+        altNames.put("REDWOOD_LEAVES", Material.SPRUCE_LEAVES);
+        altNames.put("DARKOAK_LEAVES", Material.DARK_OAK_LEAVES);
+
+        altNames.put("GENERIC_SAPLING", Material.OAK_SAPLING);
+        altNames.put("REDWOOD_SAPLING", Material.SPRUCE_SAPLING);
+		altNames.put("DARKOAK_SAPLING", Material.DARK_OAK_SAPLING);
+
+        altNames.put("GLYPHED_SANDSTONE", Material.CHISELED_SANDSTONE);
+        altNames.put("GLYPHED_RED_SANDSTONE", Material.CHISELED_RED_SANDSTONE);
+       // altNames.put("CRACKED_SANDSTONE", new Sandstone (SandstoneType.CRACKED));
+
+		altNames.put("DANDELION_YELLOW", Material.YELLOW_DYE);
+		altNames.put("GREY_DYE", Material.GRAY_DYE);
+		altNames.put("LIGHT_GREY_DYE", Material.LIGHT_GRAY_DYE);
+		altNames.put("SILVER_DYE", Material.LIGHT_GRAY_DYE);
+		altNames.put("CACTUS_GREEN", Material.GREEN_DYE);
+		altNames.put("ROSE_RED", Material.RED_DYE);
+		altNames.put("INK_SAC", Material.BLACK_DYE);
+		altNames.put("INK_SACK", Material.BLACK_DYE);
  
- 		altNames.put("ORANGE_WOOL", new Wool(Material.WOOL, DyeColor.ORANGE.getWoolData()));
-		altNames.put("MAGENTA_WOOL", new Wool (Material.WOOL, DyeColor.MAGENTA.getWoolData()));
-		altNames.put("LIGHT_BLUE_WOOL", new Wool (Material.WOOL, DyeColor.LIGHT_BLUE.getWoolData()));
-		altNames.put("YELLOW_WOOL", new Wool (Material.WOOL, DyeColor.YELLOW.getWoolData()));
-		altNames.put("LIME_WOOL", new Wool (Material.WOOL, DyeColor.LIME.getWoolData()));
-		altNames.put("PINK_WOOL", new Wool (Material.WOOL, DyeColor.PINK.getWoolData()));
-		altNames.put("GRAY_WOOL", new Wool (Material.WOOL, DyeColor.GRAY.getWoolData()));
-		altNames.put("GREY_WOOL", new Wool (Material.WOOL, DyeColor.GRAY.getWoolData()));
-		altNames.put("LIGHT_GRAY_WOOL", new Wool (Material.WOOL, DyeColor.SILVER.getWoolData()));
-		altNames.put("LIGHT_GREY_WOOL", new Wool (Material.WOOL, DyeColor.SILVER.getWoolData()));
-		altNames.put("SILVER_WOOL", new Wool (Material.WOOL, DyeColor.SILVER.getWoolData()));
-		altNames.put("CYAN_WOOL", new Wool (Material.WOOL, DyeColor.CYAN.getWoolData()));
-		altNames.put("PURPLE_WOOL", new Wool (Material.WOOL, DyeColor.PURPLE.getWoolData()));
-		altNames.put("BLUE_WOOL", new Wool (Material.WOOL, DyeColor.BLUE.getWoolData()));
-		altNames.put("BROWN_WOOL", new Wool (Material.WOOL, DyeColor.BROWN.getWoolData()));
-		altNames.put("GREEN_WOOL", new Wool (Material.WOOL, DyeColor.GREEN.getWoolData()));
-		altNames.put("RED_WOOL", new Wool (Material.WOOL, DyeColor.RED.getWoolData()));
-		altNames.put("BLACK_WOOL", new Wool (Material.WOOL, DyeColor.BLACK.getWoolData()));
+		altNames.put("GREY_WOOL", Material.GRAY_WOOL);
+		altNames.put("LIGHT_GREY_WOOL", Material.LIGHT_GRAY_WOOL);
+		altNames.put("SILVER_WOOL", Material.LIGHT_GRAY_WOOL);
 
-		altNames.put("TALL_GRASS", new LongGrass(GrassSpecies.NORMAL));
-		altNames.put("TALL_FERN", new LongGrass(GrassSpecies.FERN_LIKE));
-		altNames.put("DEAD_GRASS", new LongGrass(GrassSpecies.DEAD));
+		altNames.put("TALL_FERN", Material.LARGE_FERN);
+		altNames.put("DEAD_GRASS", Material.DEAD_BUSH);
 		
-		altNames.put("BLAZE_EGG", new SpawnEgg (EntityType.BLAZE));
-		altNames.put("CREEPER_EGG", new SpawnEgg (EntityType.CREEPER));
-		altNames.put("SLIME_EGG", new SpawnEgg (EntityType.SLIME));
-		altNames.put("ZOMBIE_EGG", new SpawnEgg (EntityType.ZOMBIE));
-		altNames.put("SPIDER_EGG", new SpawnEgg (EntityType.SPIDER));
-		altNames.put("CAVE_SPIDER_EGG", new SpawnEgg (EntityType.CAVE_SPIDER));
-		altNames.put("ENDERMAN_EGG", new SpawnEgg (EntityType.ENDERMAN));
-		altNames.put("GHAST_EGG", new SpawnEgg (EntityType.GHAST));
-		altNames.put("PIG_ZOMBIE_EGG", new SpawnEgg (EntityType.PIG_ZOMBIE));
-		altNames.put("PIGMAN_EGG", new SpawnEgg (EntityType.PIG_ZOMBIE));
-		altNames.put("SILVERFISH_EGG", new SpawnEgg (EntityType.SILVERFISH));
-		altNames.put("MAGMA_CUBE_EGG", new SpawnEgg (EntityType.MAGMA_CUBE));
-		altNames.put("LAVA_SLIME_EGG", new SpawnEgg (EntityType.MAGMA_CUBE));
-		altNames.put("WITHER_EGG", new SpawnEgg (EntityType.WITHER));
-		altNames.put("BAT_EGG", new SpawnEgg (EntityType.BAT));
-		altNames.put("WITCH_EGG", new SpawnEgg (EntityType.WITCH));
-		altNames.put("PIG_EGG", new SpawnEgg (EntityType.PIG));
-		altNames.put("SHEEP_EGG", new SpawnEgg (EntityType.SHEEP));
-		altNames.put("COW_EGG", new SpawnEgg (EntityType.COW));
-		altNames.put("CHICKEN_EGG", new SpawnEgg (EntityType.CHICKEN));
-		altNames.put("SQUID_EGG", new SpawnEgg (EntityType.SQUID));
-		altNames.put("WOLF_EGG", new SpawnEgg (EntityType.WOLF));
-		altNames.put("MUSHROOM_COW_EGG", new SpawnEgg (EntityType.MUSHROOM_COW));
-		altNames.put("MOOSHROOM_EGG", new SpawnEgg (EntityType.MUSHROOM_COW));
-		altNames.put("OCELOT_EGG", new SpawnEgg (EntityType.OCELOT));
-		altNames.put("HORSE_EGG", new SpawnEgg (EntityType.HORSE));
-		altNames.put("VILLAGER_EGG", new SpawnEgg (EntityType.VILLAGER));
-		altNames.put("HORSE_EGG", new SpawnEgg (EntityType.HORSE));
+		altNames.put("BLAZE_EGG", Material.BLAZE_SPAWN_EGG);
+		altNames.put("CREEPER_EGG", Material.CREEPER_SPAWN_EGG);
+		altNames.put("SLIME_EGG", Material.SLIME_SPAWN_EGG);
+		altNames.put("ZOMBIE_EGG", Material.ZOMBIE_SPAWN_EGG);
+		altNames.put("SPIDER_EGG", Material.SPIDER_SPAWN_EGG);
+		altNames.put("CAVE_SPIDER_EGG", Material.CAVE_SPIDER_SPAWN_EGG);
+		altNames.put("ENDERMAN_EGG", Material.ENDERMAN_SPAWN_EGG);
+		altNames.put("GHAST_EGG", Material.GHAST_SPAWN_EGG);
+		altNames.put("PIG_ZOMBIE_EGG", Material.ZOMBIE_PIGMAN_SPAWN_EGG);
+		altNames.put("PIGMAN_EGG",Material.ZOMBIE_PIGMAN_SPAWN_EGG);
+		altNames.put("SILVERFISH_EGG", Material.SILVERFISH_SPAWN_EGG);
+		altNames.put("MAGMA_CUBE_EGG", Material.MAGMA_CUBE_SPAWN_EGG);
+		altNames.put("LAVA_SLIME_EGG", Material.MAGMA_CUBE_SPAWN_EGG);
+		altNames.put("WITHER_EGG", Material.WITHER_SKELETON_SPAWN_EGG);
+		altNames.put("BAT_EGG", Material.BAT_SPAWN_EGG);
+		altNames.put("WITCH_EGG", Material.WITCH_SPAWN_EGG);
+		altNames.put("PIG_EGG", Material.PIG_SPAWN_EGG);
+		altNames.put("SHEEP_EGG", Material.SHEEP_SPAWN_EGG);
+		altNames.put("COW_EGG", Material.COW_SPAWN_EGG);
+		altNames.put("CHICKEN_EGG", Material.CHICKEN_SPAWN_EGG);
+		altNames.put("SQUID_EGG", Material.SQUID_SPAWN_EGG);
+		altNames.put("WOLF_EGG", Material.WOLF_SPAWN_EGG);
+		altNames.put("MUSHROOM_COW_EGG", Material.MOOSHROOM_SPAWN_EGG);
+		altNames.put("MOOSHROOM_EGG", Material.MOOSHROOM_SPAWN_EGG);
+		altNames.put("OCELOT_EGG", Material.OCELOT_SPAWN_EGG);
+		altNames.put("HORSE_EGG", Material.HORSE_SPAWN_EGG);
+		altNames.put("VILLAGER_EGG", Material.VILLAGER_SPAWN_EGG);
 		
-		altNames.put("WHITE_BANNER", new Banner (Material.WOOL, DyeColor.WHITE.getWoolData()));
-	 	altNames.put("ORANGE_BANNER", new Banner(Material.WOOL, DyeColor.ORANGE.getWoolData()));
-		altNames.put("MAGENTA_BANNER", new Banner (Material.WOOL, DyeColor.MAGENTA.getWoolData()));
-		altNames.put("LIGHT_BLUE_BANNER", new Banner (Material.WOOL, DyeColor.LIGHT_BLUE.getWoolData()));
-		altNames.put("YELLOW_BANNER", new Banner (Material.WOOL, DyeColor.YELLOW.getWoolData()));
-		altNames.put("LIME_BANNER", new Banner (Material.WOOL, DyeColor.LIME.getWoolData()));
-		altNames.put("PINK_BANNER", new Banner (Material.WOOL, DyeColor.PINK.getWoolData()));
-		altNames.put("GRAY_BANNER", new Banner (Material.WOOL, DyeColor.GRAY.getWoolData()));
-		altNames.put("GREY_BANNER", new Banner (Material.WOOL, DyeColor.GRAY.getWoolData()));
-		altNames.put("LIGHT_GRAY_BANNER", new Banner (Material.WOOL, DyeColor.SILVER.getWoolData()));
-		altNames.put("LIGHT_GREY_BANNER", new Banner (Material.WOOL, DyeColor.SILVER.getWoolData()));
-		altNames.put("SILVER_BANNER", new Banner (Material.WOOL, DyeColor.SILVER.getWoolData()));
-		altNames.put("CYAN_BANNER", new Banner (Material.WOOL, DyeColor.CYAN.getWoolData()));
-		altNames.put("PURPLE_BANNER", new Banner (Material.WOOL, DyeColor.PURPLE.getWoolData()));
-		altNames.put("BLUE_BANNER", new Banner (Material.WOOL, DyeColor.BLUE.getWoolData()));
-		altNames.put("BROWN_BANNER", new Banner (Material.WOOL, DyeColor.BROWN.getWoolData()));
-		altNames.put("GREEN_BANNER", new Banner (Material.WOOL, DyeColor.GREEN.getWoolData()));
-		altNames.put("RED_BANNER", new Banner (Material.WOOL, DyeColor.RED.getWoolData()));
-		altNames.put("BLACK_BANNER", new Banner (Material.WOOL, DyeColor.BLACK.getWoolData()));
+		altNames.put("GREY_BANNER", Material.GRAY_BANNER);
+		altNames.put("LIGHT_GREY_BANNER", Material.LIGHT_GRAY_BANNER);
+		altNames.put("SILVER_BANNER", Material.LIGHT_GRAY_BANNER);
 	
 		} catch (Throwable t) {
 			System.out.println ("MaterialDataStringer: FAILURE during static initialization: " + t);
@@ -235,28 +124,12 @@ public class MaterialDataStringer extends MaterialData {
 		if (mat == null) {
 			name = name.toUpperCase();
 			
-			MaterialData md = altNames.get (name);
-			if (md != null) {
-				mat = md.getItemType();
+			mat = altNames.get (name);
+			if (mat != null) {
 				// Bukkit.getLogger().config ("Matched alternative name '" + name + "' for " + mat);
 			}
 		}
 		return mat;
-	}
-	static public MaterialData matchMaterialData (String name) {
-		if (name == null)
-			return null;
-		MaterialData md = altNames.get (name.toUpperCase());
-		if (md != null) {
-			// Bukkit.getLogger().config ("Matched alternative name '" + name + "' for " + md);
-		} else {
-			Material mat = Material.getMaterial (name.toUpperCase().trim());
-			if (mat != null) {
-				// make MaterialData with no data
-				md = new MaterialData (mat);
-			}						
-		}				
-		return md;
 	}
 	
 	//DEBUG USE ONLY
@@ -264,71 +137,9 @@ public class MaterialDataStringer extends MaterialData {
 		return altNames.keySet();
 	}
 
-	public MaterialDataStringer (int type, final byte data) {
-        super(type, data);
-    }
-	public MaterialDataStringer (final Material type, final byte data) {
-        super(type, data);
-    }
-    public MaterialDataStringer (MaterialData md) {
-    	this (md.getItemType(), md.getData());
-    }
     // Caution: If name not found, will throw null pointer exception
     public MaterialDataStringer (String name) {
-    	this (matchMaterialData (name));   
+    	this.matchMaterial (name);   
      	// throw new IllegalArgumentException (name + " not found");
-    }
-
-    @Override
-    public String toString() {
-
-	    Class<? extends MaterialData> MDC = getItemType().getData();
-	    Constructor<? extends MaterialData> ctor;
-	    if (MDC == null) {
-	    	// no data; use Material toString() to avoid "(0)" appendage
-	    	return getItemType().toString();
-	    } 
-	    // else all this just to get a nice string??
-		try {
-			ctor = MDC.getConstructor (Material.class, byte.class);
-		} catch (NoSuchMethodException ex) {
-			try {
-				ctor = MDC.getConstructor (int.class, byte.class);
-			} catch (NoSuchMethodException nex) {
-				throw new AssertionError("no (Material/int,byte) constructor for " + MDC);
-			}
-
-			try {
-				return ctor.newInstance (getItemTypeId(), getData()).toString();
-			} catch (InstantiationException nex) {
-				final Throwable t = nex.getCause();
-				if (t instanceof RuntimeException) {
-					throw (RuntimeException) t;
-				}
-				if (t instanceof Error) {
-					throw (Error) t;
-				}
-				throw new AssertionError(t);
-			} catch (Throwable t) {
-				throw new AssertionError(t);
-			}		
-	
-		} catch (SecurityException ex) {
-			throw new AssertionError(ex);
-		}
-		try {
-			return ctor.newInstance (getItemType(), getData()).toString();
-		} catch (InstantiationException ex) {
-            final Throwable t = ex.getCause();
-            if (t instanceof RuntimeException) {
-                throw (RuntimeException) t;
-            }
-            if (t instanceof Error) {
-                throw (Error) t;
-            }
-            throw new AssertionError(t);
-        } catch (Throwable t) {
-            throw new AssertionError(t);
-        }		
     }
 }

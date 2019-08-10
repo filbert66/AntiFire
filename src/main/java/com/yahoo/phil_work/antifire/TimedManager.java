@@ -81,8 +81,8 @@ class TimedManager implements Listener {
 				return Long.toString(min);
 		}
 	}	
-	private HashMap <String, TimedExtinguisher> WorldTimed = new HashMap (8);
-	private HashMap <IgniteCause, TimedLength> TimedCause = new HashMap ();
+	private HashMap <String, TimedExtinguisher> WorldTimed = new HashMap<String, TimedExtinguisher> (8);
+	private HashMap <IgniteCause, TimedLength> TimedCause = new HashMap<IgniteCause, TimedLength> ();
 	private AntiFire plugin;
 
 	TimedManager (AntiFire p) {

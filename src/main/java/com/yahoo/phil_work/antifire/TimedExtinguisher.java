@@ -90,7 +90,7 @@ class TimedExtinguisher extends	BukkitRunnable {
 				try {
 					// FUTURE in 1.8: Will I be able to call this any more? May have to use this.runTaskLater()...
 					//   but 1.7 had bug there that wouldn't allow rescheduling a task.
-					myTask = plugin.getServer().getScheduler().runTaskLater (plugin, this, delay); // reschedule
+					myTask = this.runTaskLater (plugin, delay); // reschedule
 				} catch (IllegalArgumentException e) {
 					// plugin was null
 				} catch (IllegalStateException e) {
@@ -180,7 +180,7 @@ class TimedExtinguisher extends	BukkitRunnable {
 		
 		plugin.getLogger().finer ("periodic extinguisher task running for " + FixedLengthBlocks.size() + " blocks");
 		
-	 	ArrayList<TimedBlock> deleteList = new ArrayList();
+	 	ArrayList<TimedBlock> deleteList = new ArrayList <TimedBlock>();
 		
 		for (TimedBlock b : FixedLengthBlocks) {
 			if (b.getExpiry() <= now + 1) { //always getting called with -1 before now
@@ -227,7 +227,7 @@ class TimedExtinguisher extends	BukkitRunnable {
 			long delay = millisecsToTicks (nextOut - now);
 			if (delay == 0) delay++;	// ensure longer wait
 			
-			myTask = plugin.getServer().getScheduler().runTaskLater (this.plugin, this, delay);  
+			myTask = this.runTaskLater (this.plugin, delay);  
 			plugin.getLogger().fine ("Rescheduled extinguish in " + world.getName() + " in " + delay + " ticks");
 		} catch (IllegalArgumentException e) {
 			// plugin was null

@@ -65,6 +65,7 @@ import org.bukkit.entity.Entity;
 import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
 
 import org.mcstats.Metrics;
+//import org.spigotmc.Metrics;
 
 import com.yahoo.phil_work.LanguageWrapper;
 
@@ -217,7 +218,7 @@ public class AntiFire extends JavaPlugin {
 		if (getConfig().isString ("log_level")) {
 			Log_Level = getConfig().getString("log_level", "INFO"); // hidden config item
 			try {
-				log.setLevel (log.getLevel().parse (Log_Level));
+				log.setLevel (Level.parse (Log_Level));
 				log.info ("successfully set log level to " + log.getLevel());
 			}
 			catch (Throwable IllegalArgumentException) {
@@ -351,6 +352,7 @@ public class AntiFire extends JavaPlugin {
 	
 
 	//     usage: <command> [next|<player>]
+	@SuppressWarnings("deprecation") // ignore getOfflinePlayer(String)
 	private boolean logCommand(CommandSender sender, String[] args) {
 		boolean colors = (sender instanceof Player) ? true : false;
 		
@@ -415,6 +417,7 @@ public class AntiFire extends JavaPlugin {
 	}
 	
 	// usage: <command> [last|#|<playername>] 
+	@SuppressWarnings("deprecation") // ignore getOfflinePlayer(String)
 	private boolean tpCommand(CommandSender sender, String[] args) {
 		if ( !(sender instanceof Player)) {
 			sender.sendMessage (pdfFile.getName() + ": Cannot teleport SERVER");
@@ -563,7 +566,7 @@ public class AntiFire extends JavaPlugin {
 							String wName = ((Player)sender).getLocation().getWorld().getName();
 							
 							List <String> tNeth = (this.getConfig().isString (item) ?
-													new ArrayList(Arrays.asList(getConfig().getString (item).split(","))) : 
+													new ArrayList<String>(Arrays.asList(getConfig().getString (item).split(","))) : 
 													getConfig().getStringList (item) );
 							// this.log.fine ("Current tNeth=" + tNeth);
 							if (! newVal) { 
@@ -638,7 +641,7 @@ public class AntiFire extends JavaPlugin {
 				String wName = p.getLocation().getWorld().getName();
 
 				List <String> noSpread = (this.getConfig().isString ("nerf_fire.nospread") ?
-											new ArrayList(Arrays.asList(getConfig().getString ("nerf_fire.nospread").split(","))) : 
+											new ArrayList<String>(Arrays.asList(getConfig().getString ("nerf_fire.nospread").split(","))) : 
 											getConfig().getStringList ("nerf_fire.nospread") );
 				this.log.fine ("Current nospread=" + noSpread);
 				if (turnOnSpread) { // turn on spread means remove nospread
@@ -700,7 +703,7 @@ public class AntiFire extends JavaPlugin {
 
 				// Not working when config is a string. Need to 
 				List <String> noSpread = (this.getConfig().isString ("nerf_fire.wooddropscharcoal") ?
-											new ArrayList(Arrays.asList(getConfig().getString ("nerf_fire.wooddropscharcoal").split(","))) : 
+											new ArrayList <String>(Arrays.asList(getConfig().getString ("nerf_fire.wooddropscharcoal").split(","))) : 
 											getConfig().getStringList ("nerf_fire.wooddropscharcoal") );
 				// this.log.fine ("Current nospread=" + noSpread);
 				if ( !charcoalOn) { // turn on spread means remove nospread
@@ -861,7 +864,7 @@ public class AntiFire extends JavaPlugin {
 					ActiveInWorld = antiFire.ifConfigContains (logConfig, wName);
 
 					newLog = (this.getConfig().isString (logConfig) ?
- 							new ArrayList(Arrays.asList(getConfig().getString (logConfig).split(","))) : 
+ 							new ArrayList <String>(Arrays.asList(getConfig().getString (logConfig).split(","))) : 
 							getConfig().getStringList (logConfig) );
 					this.log.fine ("Current " + logConfig + "=" + newLog);
 				}
@@ -927,7 +930,7 @@ public class AntiFire extends JavaPlugin {
 	
 	private List <Entity> getNearbyEntities (Location loc, int radius) {
 		Chunk center = loc.getChunk();
-		List <Entity> eList = new ArrayList ();
+		List <Entity> eList = new ArrayList<Entity> ();
 		int chunks = 1;
 		
 		// Process local chunk
@@ -962,14 +965,14 @@ public class AntiFire extends JavaPlugin {
 		
 		double x,y,z; 
 		int savedBlocks = 0, savedEntities= 0;
-		int fire = Material.FIRE.getId(); // 51, but let's be clear.
+		Material fire = Material.FIRE;
 		World w = l.getWorld();
 		List <Entity> eList;
 		
 		for (x= l.getX() - radius; x < l.getX()+ radius; x++)
 			for (y= l.getY() - radius; y < l.getY()+ radius; y++)
 				for (z= l.getZ() - radius; z < l.getZ()+ radius; z++) 
-					if (w.getBlockTypeIdAt((int)x,(int)y,(int)z) == fire) { // faster check than getBlock()
+					if (w.getBlockAt((int)x,(int)y,(int)z).getType() == fire) { // faster check than getBlock()
 						w.getBlockAt ((int)x,(int)y,(int)z).setType (Material.AIR); // i.e. extinguish
 						savedBlocks++;
 					}
@@ -1059,6 +1062,7 @@ public class AntiFire extends JavaPlugin {
 	 *  number command means supplied radius, so also only good for Players
 	 *  'world' param alone means current world, so only good for Players
  	 */
+ 	@SuppressWarnings("deprecation") // offlinePlayer(String)
 	private boolean extinguishCommand(CommandSender sender, String[] args) 
 	{
 		boolean colors = (sender != null && sender instanceof Player) ? true : false;

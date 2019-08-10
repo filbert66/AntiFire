@@ -45,7 +45,7 @@ public class LanguageWrapper {
     }
     
 	public void addNewLanguages () {
-		final String Slash = plugin.getDataFolder().separator;
+		final String Slash = File.separator;
 		final String pluginPath = "plugins"+ Slash + plugin.getDataFolder().getName() + Slash;
 		Logger log = plugin.getLogger();
 

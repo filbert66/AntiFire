@@ -4,7 +4,7 @@
 
 	<groupId>com.yahoo.phil_work</groupId>
 	<artifactId>antifire</artifactId>
-	<version>2.9</version>
+	<version>3.0</version>
 	<packaging>jar</packaging>
 
 	<name>AntiFire</name>
@@ -18,13 +18,13 @@
             <groupId>org.bukkit</groupId>
             <artifactId>bukkit</artifactId>
             <!-- Bukkit API Version, change if necessary -->
-            <version>1.7.9-R0.2</version>
+            <version>1.14.4-R0.1-SNAPSHOT</version>
             <!-- <version>1.8.7-R0.1-SNAPSHOT</version> --> <!-- from spigot repo -->
         </dependency>
 		<dependency>
 			<groupId>org.mcstats.bukkit</groupId>
 			<artifactId>metrics</artifactId>
-			<version>R7</version>
+			<version>R8-SNAPSHOT</version>
 			<scope>compile</scope>
 		</dependency>
 		<dependency>
@@ -61,6 +61,9 @@
 					<excludes>
 						<exclude>**/Explosion_Nerfing_Plugin.java</exclude>
 					</excludes>
+					<compilerArgument>-Xlint:all,-unchecked</compilerArgument>
+					<showWarnings>true</showWarnings>
+					<showDeprecation>true</showDeprecation>					
 				</configuration>
 			</plugin>
 			<plugin>
@@ -115,7 +118,7 @@
 		</resources>
 	</build>
 	<repositories>
-        <repository>
+        <repository>  <!-- only up to 1.7.9 -->
           <id>bukkit-repo</id>
           <url>http://repo.bukkit.org/content/groups/public/</url>
         </repository>

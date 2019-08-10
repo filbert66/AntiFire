@@ -27,7 +27,7 @@ public enum IgniteCause {
 	;
 	
 	private final String configName;
-	private final static Map<String, IgniteCause> BY_NAME = new HashMap();
+	private final static Map<String, IgniteCause> BY_NAME = new HashMap<String, IgniteCause>();
 
 	private IgniteCause (final String name) {
 		configName = name;

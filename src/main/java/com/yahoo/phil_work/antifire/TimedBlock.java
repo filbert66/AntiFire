@@ -7,13 +7,14 @@ package com.yahoo.phil_work.antifire;
 import java.util.List;
 
 import org.bukkit.block.Block;
+import org.bukkit.block.data.BlockData;
 import org.bukkit.block.BlockState;
 import java.util.Comparator;
 import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.material.MaterialData; // have to include until the remove the Deprecated functions that I have to override.
 import org.bukkit.World;
-import org.bukkit.material.MaterialData;
 import org.bukkit.metadata.MetadataValue;
 import org.bukkit.plugin.Plugin;
 
@@ -52,7 +53,7 @@ class TimedBlock implements BlockState
     // Begin BlockState routines
     public Block getBlock() { return state.getBlock(); }
 
-    public MaterialData getData() { return state.getData(); }
+    @Deprecated public MaterialData getData() { return state.getData(); }
 	public Material getType() { return state.getType(); } 
 
 	public byte getLightLevel() { return state.getLightLevel(); }
@@ -75,7 +76,9 @@ class TimedBlock implements BlockState
 	}
   	public Chunk getChunk() { return state.getChunk(); }
 
-	public void setData(MaterialData data) { state.setData(data); }
+	@Deprecated public void setData(MaterialData data) { state.setData(data); }
+	public void setBlockData(BlockData data) { state.setBlockData (data); }
+	public BlockData getBlockData​() { return state.getBlockData (); }
 	public void setType(Material type) { state.setType (type); }
 	
 
@@ -90,12 +93,12 @@ class TimedBlock implements BlockState
 
 	@Deprecated
 	public void setRawData(byte data) { state.setRawData(data); } 
-	@Deprecated
-	public boolean setTypeId(int type) { return state.setTypeId(type); }  
+//	@Deprecated
+//	public boolean setTypeId(int type) { return state.setTypeId(type); }  
 	@Deprecated
 	public byte getRawData() { return state.getRawData(); } 
-	@Deprecated
-	public int getTypeId() { return state.getTypeId(); }  
+//	@Deprecated
+//	public int getTypeId() { return state.getTypeId(); } 
 	
 	// MEtaData routines
 	public boolean hasMetadata (String s) { return state.hasMetadata (s); }

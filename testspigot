@@ -1,1 +1,2 @@
+cp target/antifire-$1.jar bin/AntiFire.jar
 cp bin/AntiFire.jar ../spigot/server/plugins/

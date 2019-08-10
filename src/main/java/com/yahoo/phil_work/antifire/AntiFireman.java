@@ -34,8 +34,10 @@
  *    May 2014 : PSW : Use new UUID firelog calls.
  * 18 Dec 2014 : PSW : Expand .nonplayer to hostilemob, peacefulmob, mob, drops, painting, item
  * 21 Jan 2015 : PSW : avoid NPE on restart with timedMgr.
- * 30 Jul 2015 : PSW : Disabiguated getTargetBlock to be compatible with MC 1.8
+ * 30 Jul 2015 : PSW : Disambiguated getTargetBlock to be compatible with MC 1.8
  * 03 Aug 2015 : PSW : Pass worldName to timeForeverBlocksToo()
+ * *********************
+ * 08 Aug 2019 : PSW : Update to Spigot 1.14 API: no MaterialData. 
  */
 
  package com.yahoo.phil_work.antifire;
@@ -67,16 +69,11 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.player.PlayerBucketEmptyEvent;
 
 import org.bukkit.Material;
-import org.bukkit.material.Coal;
-import org.bukkit.TreeSpecies;
-import org.bukkit.material.Tree;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.block.Block;
-import org.bukkit.block.BlockState;
-import org.bukkit.material.MaterialData;
+import org.bukkit.block.BlockState; 
 import org.bukkit.projectiles.ProjectileSource;
-import org.bukkit.CoalType;
 import org.bukkit.Effect;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
@@ -95,11 +92,13 @@ import org.bukkit.ChatColor;
 import org.bukkit.permissions.PermissionAttachmentInfo;
 
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.Bukkit;
 
 import com.yahoo.phil_work.BlockId;
 import com.yahoo.phil_work.BlockIdList;
 import com.yahoo.phil_work.MaterialDataStringer;
+import com.yahoo.phil_work.MaterialCategory;
 import com.yahoo.phil_work.EntityClassifier;
 import com.yahoo.phil_work.antifire.FireLogEntry;
 import com.yahoo.phil_work.antifire.AntifireLog;
@@ -333,12 +332,12 @@ public class AntiFireman implements Listener
 					b = true; // at start
 				else { // was previous char word boundary?
 					Character c = new Character (s.charAt (found - 1));
-					if ( !(c.isLetterOrDigit(c) || c.equals('_')))  // word border
+					if ( !(Character.isLetterOrDigit(c) || c.equals('_')))  // word border
 						b= true;
 				}
 			} else {
 				Character c = new Character (s.charAt(found + pattern.length()));
-				if (c.isLetterOrDigit(c) || c.equals('_')) { // word continues!
+				if (Character.isLetterOrDigit(c) || c.equals('_')) { // word continues!
 					b= false;
 					//plugin.log.finer ("'" + pattern + "' is only a partial word within '" + s + "', found char " + c);
 					
@@ -394,6 +393,7 @@ public class AntiFireman implements Listener
 	// Handle new (1.5.1) event.getIgnitingBlock() and event.getIgnitingEntity
 	// 1.5.1 also calls now for lightning, fireballs 
 	@EventHandler (ignoreCancelled = true)
+	@SuppressWarnings ("fallthrough")
 	public void onFireStart (BlockIgniteEvent event)
 	{	
 		Player p = event.getPlayer();
@@ -439,7 +439,7 @@ public class AntiFireman implements Listener
 				}
 				else if (event.getCause() == BlockIgniteEvent.IgniteCause.FLINT_AND_STEEL) // if fireball, he might have looked away
 					// calling deprecated version but OK since parameter is null
-					target = p.getTargetBlock((HashSet<Byte>) null, 5); // what is he trying to ignite w/in clickable distance?
+					target = p.getTargetBlock((HashSet<Material>) null, 5); // what is he trying to ignite w/in clickable distance?
 				break;
 				
 			case LIGHTNING:// need to test
@@ -489,17 +489,17 @@ public class AntiFireman implements Listener
 			if (block == null)
 				block = event.getBlock();
 
-			BlockId b = new BlockId (block.getTypeId(),block.getData());
+			BlockId b = new BlockId (block.getType ());
 				
 			if ( !FireResistantList.isEmpty())
 				// Checking for whitelist (list of IDs to burn) or blacklist (IDs to not burn)
 				if ((whitelist && !FireResistantList.contains (b)) || 
 					( !whitelist && FireResistantList.contains (b)) )
 				{
-					plugin.log.fine ("blocked fire start on resistant block type " + block.getType() + " in " + worldName);
+					plugin.log.fine ("blocked fire start on resistant block type " + block.getType().toString() + " in " + worldName);
 					if (p != null)
 						p.sendMessage (plugin.pluginName + " says block " + 
-									   new MaterialDataStringer (block.getType(),block.getData()) + " is fire resistant");
+									   block.getType().toString() + " is fire resistant");
 					event.setCancelled (true);
 					this.fireProofed++;
 					return;
@@ -609,7 +609,7 @@ public class AntiFireman implements Listener
 	}
 	
 	// Always deletes supplied block. 
-	// If config is set, replaces LOGs with 0-3 charcoal.
+	// If config is set, replaces LOGs, WOOD, and STRIPPED_ versions with 0-3 charcoal.
 	// Chances of any drop: 50%. Chances of 1-3: even.
 	// Now maximum is driven by config, and if not configured to be random, drops the max. 
 	private void burnUpBlock (Block b) {
@@ -619,54 +619,51 @@ public class AntiFireman implements Listener
 
 		// Should move config validation to startup, not runtime/eachtime code
 
-		if ((m == Material.LOG || m == Material.LOG_2) && ifConfigContains ("nerf_fire.wooddropscharcoal", worldName)) {
+		if (MaterialCategory.isBurnableWood (m) && ifConfigContains ("nerf_fire.wooddropscharcoal", worldName)) {
 			int amount = 0;
 			int max = plugin.getConfig().getInt ("nerf_fire.charcoaldrop.max");
-			Tree t = new Tree (m,b.getData());
 	
-			// Have to use getSpecies() to strip out log orientation bits in the data byte
-			// can't use getSpecies.toString() since that will incorrectly show GENERIC for ACACIA
-			plugin.log.fine ("AF: burning up log of type " + m + ":" + t.getSpecies().getData()); 
+			plugin.log.fine ("AF: burning up log of type " + m); 
 
 			int anyDropChance = plugin.getConfig().getInt ("nerf_fire.charcoaldrop.anydropchance");
 			if (rng.nextInt (100) > anyDropChance) {
 				plugin.log.finer ("No drop due to anydropchance of " +anyDropChance + "%");
 				max = 0;
 			}		
+		    /* Deprecated and now removed***
 		    // Allow max configurable by wood type
 			else if (plugin.getConfig().isSet ("nerf_fire.charcoaldrop.treetypemax")) {
 				// plugin.log.finer ("Found new treetypemax");
 				
-				TreeSpecies treeType = t.getSpecies();
+				 Species treeType = t.getSpecies();
 				// plugin.log.finer ("detected LOG of type " + treeType + " data: " + treeType.getData());
 				List <Short> treeTypeMax = plugin.getConfig().getShortList ("nerf_fire.charcoaldrop.treetypemax");
 
 				// Could call treeType.ordinal() to get int value
-				if (treeTypeMax.size() > treeType.getData()) {
-					max = treeTypeMax.get(treeType.getData());
+				if (treeTypeMax.size() > treeType.ordinal()) {
+					max = treeTypeMax.get(treeType.ordinal());
 					// plugin.log.finer ("Reset max charcoal for type " + treeType + " to " + max);
 				}
 				else
 					plugin.log.warning ("charcoaldrop.treetypemax missing value for " + TreeSpecies.getByData(b.getData()) + "(" + b.getData() + "); using charcoaldrop.max");
-			} else if (plugin.getConfig().isSet ("nerf_fire.charcoaldrop.speciesmax")) {
+			}
+			***/
+			 else if (plugin.getConfig().isSet ("nerf_fire.charcoaldrop.speciesmax")) {
 				boolean found = false;
 				for (String matString : plugin.getConfig().getConfigurationSection ("nerf_fire.charcoaldrop.speciesmax").getKeys(/*deep=*/false)) {
-					MaterialData md = MaterialDataStringer.matchMaterialData (matString);
+					Material md = MaterialDataStringer.matchMaterial (matString);
 					if (md == null) {
 						plugin.log.warning ("speciesmax: '" + matString + "' unrecognized Material. Refer to http://bit.ly/19sfyhe");
 					} 
-					else if (md.getItemType() == m) 
+					else if (md == m) 
 					{  // Need to be careful not to compare orientation bits in data
-						Tree testTree = new Tree (m, md.getData()); // gives orientation bits, but getSpecies() removes them
-						if (testTree.getSpecies() == t.getSpecies()) {
-							max = plugin.getConfig().getInt ("nerf_fire.charcoaldrop.speciesmax." + matString, max);
-							found = true;
-							break;
-						}
+						max = plugin.getConfig().getInt ("nerf_fire.charcoaldrop.speciesmax." + matString, max);
+						found = true;
+						break;
 					} // else plugin.log.info ("Not matching config ." + matString + "= " + md);
 				}
 				if (!found)
-					plugin.log.warning ("speciesmax doesn't contain " + new MaterialData (m,b.getData()) + "; using .max");
+					plugin.log.warning ("speciesmax doesn't contain " + m + "; using .max");
 			}
 
 			if (max > 0 && plugin.getConfig().getBoolean ("nerf_fire.charcoaldrop.random"))
@@ -686,8 +683,8 @@ Chc	Max	average
 				amount = max;
 			
 			if (amount > 0) {
-				MaterialData mat = new Coal (CoalType.CHARCOAL);
-				w.dropItem (b.getLocation(), mat.toItemStack (amount));
+				Material mat = Material.CHARCOAL;
+				w.dropItem (b.getLocation(), new ItemStack (mat, amount));
 				plugin.log.fine ("AF: dropping " + amount + " (max:" + max + ") charcoal at " + b.getLocation());
 			}
 		}
@@ -730,7 +727,7 @@ Chc	Max	average
 		else if ( !FireResistantList.isEmpty()) {
 			boolean whitelist = plugin.getConfig().getBoolean ("nerf_fire.whitelist");
 			Block block = event.getBlock();
-			BlockId b = new BlockId (block.getTypeId(), block.getData());
+			BlockId b = new BlockId (block.getType());
 
 			// Checking for whitelist (list of IDs to burn) or blacklist (IDs to not burn)
 			if ((whitelist && !FireResistantList.contains (b)) || 
@@ -761,7 +758,7 @@ Chc	Max	average
 				Block newBurner = getBurningBlockFrom (block.getLocation());
 				if (newBurner != null) {
 					// this block would be burning by NMS default handling
-					b = new BlockId (newBurner.getTypeId(), newBurner.getData());
+					b = new BlockId (newBurner.getType());
 					
 					if ((whitelist && !FireResistantList.contains (b)) || 
 						( !whitelist && FireResistantList.contains (b)) )
@@ -944,6 +941,12 @@ Chc	Max	average
 		}			
 	}	
 	
+	static boolean SUPPORT_MAINHAND;
+	static { try { 
+		SUPPORT_MAINHAND = PlayerInventory.class.getMethod ("getItemInMainHand") != null;
+	} catch (Exception ex) { 
+		SUPPORT_MAINHAND = false;
+	} }		
 	/* 
 	 * Apparent sequence of events: 
 	 *    EntityDamageEvent (not yet on fire)
@@ -952,7 +955,8 @@ Chc	Max	average
 	 *    EntityCombustByBlockEvent (to Creeper by null) -- still called!
 	 *    cancel both events, and still get damage
 	 */
-	@EventHandler (ignoreCancelled = true)
+	@EventHandler (ignoreCancelled = true) 
+	@SuppressWarnings({"fallthrough", "deprecation"}) // ignore getItemInHand
 	public void onFireDamageEntity (EntityDamageByEntityEvent event) {
 		Entity damagee = event.getEntity();
 		Entity damager = event.getDamager();
@@ -969,8 +973,14 @@ Chc	Max	average
 			//  in which case we need to turn off fire but not the attack damage
 			// This avoids mobs dropping "cooked" items on death.
 			case ENTITY_ATTACK: 
-				if (damager instanceof HumanEntity && ((HumanEntity)damager).getItemInHand().containsEnchantment(Enchantment.FIRE_ASPECT)) {
-					if (ifNerfCombustion (damagee, damager) && damagee.getFireTicks() > 0) {
+				if (damager instanceof HumanEntity) {
+					boolean fireWeapon;
+					if (SUPPORT_MAINHAND)
+						 fireWeapon = ((HumanEntity)damager).getInventory().getItemInMainHand().containsEnchantment(Enchantment.FIRE_ASPECT);
+					else 
+						 fireWeapon = ((HumanEntity)damager).getItemInHand().containsEnchantment(Enchantment.FIRE_ASPECT);
+						
+					if (fireWeapon && ifNerfCombustion (damagee, damager) && damagee.getFireTicks() > 0) {
 						plugin.log.fine ("ENTITY_ATTACK: " + damagee.getType() + " was on fire; nerfed");
 						damagee.setFireTicks(0); 
 					}
@@ -1002,7 +1012,7 @@ Chc	Max	average
 	 *    EntityCombustByBlockEvent (to Creeper by null) -- still called!
 	 *    cancel both events, and still get damage
 	 */
-	@EventHandler (ignoreCancelled = true)
+	@EventHandler (ignoreCancelled = true) @SuppressWarnings({"fallthrough"})
 	public void onFireDamageEntity (EntityDamageEvent event) {
 		Entity damagee = event.getEntity();
 		String worldName = damagee.getLocation().getWorld().getName();
