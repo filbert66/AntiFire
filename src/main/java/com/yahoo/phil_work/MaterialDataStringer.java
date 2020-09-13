@@ -120,6 +120,8 @@ public class MaterialDataStringer  {
     }
 	 
 	static public Material matchMaterial (String name) {
+		if (name == null) return null; 
+		
 		Material mat = Material.matchMaterial (name);
 		if (mat == null) {
 			name = name.toUpperCase();

@@ -2,6 +2,7 @@
 * 30 Jul 2015 : PSW : Added isRepairable(), isAnvilRepairable()
 * 28 Mar 2016 : PSW : 1.9- added ELYTRA, SHIELD
 * 05 Aug 2019 : PSW : Updated for 1.14, adding TURTLE_HELMET, and changed ELYTRA repair element.
+* 15 Aug 2019 : PSW: Added TRIDENT and CROSSBOW, and isBow()
 */
 
 package com.yahoo.phil_work;
@@ -74,7 +75,18 @@ public class MaterialCategory {
 		return isHelmet(type) || isChestplate (type) || isLeggings(type) || isBoots (type) || isBarding (type);
 	}
 	public static boolean isWeapon (Material type) {
-		return (type == Material.BOW || isSword (type));
+		if (isSword (type) || type == Material.TRIDENT || isBow (type)) 
+			return true;
+
+		return false;
+	}
+	public static boolean isBow (Material type) {
+		switch (type) {
+			case BOW:
+			case CROSSBOW:
+				return true;
+		} 
+		return false;
 	}
 	public static boolean isTool (Material type) {
 		if (isSpade (type) || isHoe (type) || isPick (type) || isAxe (type))
@@ -224,6 +236,7 @@ public class MaterialCategory {
 
 		// now catch unrepairable items
 		switch (type) {
+		    case CROSSBOW:
 			case BOW:   // only with another bow
 			case SHEARS: // only with another shear
 			case FLINT_AND_STEEL:
@@ -232,6 +245,7 @@ public class MaterialCategory {
 			case COMPASS:
 			case CLOCK:
 			case LEAD:
+			case TRIDENT:
 				return false;
 			default:
 				return true;

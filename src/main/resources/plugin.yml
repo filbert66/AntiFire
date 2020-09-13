@@ -10,6 +10,7 @@
 # May 15 2013: added burnmob, burnplayer permissions
 # Sep 22 2013: added lava permissions
 # Aug 09 2019: Added api-version: 1.13
+# Jun 25 2020: Added softdepend
 
 name: AntiFire
 
@@ -24,6 +25,7 @@ description: >
              Fire control, for starting/placement, damage, spread. Includes logging and commands to TP to last fire placement and to extinguish fires
 
 api-version: 1.13
+softdepend: [LanguagesAPI]
 
 commands:
 
